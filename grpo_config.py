@@ -13,7 +13,8 @@ class TrainingConfig:
     num_train_epochs: float = 1.0
     max_steps: int = -1
     learning_rate: float = 1e-6
-    warmup_ratio: float = 0.03
+    warmup_steps: int = 0
+    warmup_ratio: float | None = None
     logging_steps: int = 10
     save_steps: int = 200
     save_total_limit: int = 2

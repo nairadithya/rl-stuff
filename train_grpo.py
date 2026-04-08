@@ -3,8 +3,41 @@ from __future__ import annotations
 import argparse
 import ast
 import os
+import sys
 from dataclasses import asdict
 from pathlib import Path
+
+
+def _configure_mps_env() -> None:
+    if sys.platform != "darwin":
+        return
+
+    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
+    os.environ.setdefault("OMP_NUM_THREADS", "8")
+    os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
+
+    try:
+        high = float(os.environ.get("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.8"))
+    except ValueError:
+        high = 0.8
+
+    if not (0.0 < high <= 1.0):
+        high = 0.8
+
+    low_default = max(0.1, min(0.6, high - 0.1))
+    try:
+        low = float(os.environ.get("PYTORCH_MPS_LOW_WATERMARK_RATIO", str(low_default)))
+    except ValueError:
+        low = low_default
+
+    if not (0.0 < low < high):
+        low = low_default
+
+    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = f"{high:.2f}"
+    os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = f"{low:.2f}"
+
+
+_configure_mps_env()
 
 from datasets import load_dataset
 from peft import LoraConfig
@@ -42,6 +75,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--learning-rate", type=float, default=None, help="Learning rate."
     )
+    parser.add_argument("--warmup-steps", type=int, default=None, help="Warmup steps.")
     parser.add_argument(
         "--warmup-ratio", type=float, default=None, help="Warmup ratio."
     )
@@ -180,6 +214,7 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         "num_train_epochs": args.num_train_epochs,
         "max_steps": args.max_steps,
         "learning_rate": args.learning_rate,
+        "warmup_steps": args.warmup_steps,
         "warmup_ratio": args.warmup_ratio,
         "logging_steps": args.logging_steps,
         "save_steps": args.save_steps,
@@ -237,6 +272,19 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
     if isinstance(data.get("lora_target_modules"), list):
         data["lora_target_modules"] = tuple(data["lora_target_modules"])
 
+    if data.get("warmup_steps") is not None and data["warmup_steps"] < 0:
+        raise ValueError("warmup_steps must be >= 0")
+
+    if data.get("warmup_steps") in (None, 0) and data.get("warmup_ratio") not in (
+        None,
+        0,
+    ):
+        max_steps = data.get("max_steps", -1)
+        if max_steps and max_steps > 0:
+            data["warmup_steps"] = int(max_steps * float(data["warmup_ratio"]))
+        else:
+            data["warmup_steps"] = 0
+
     if data["report_to"] == "none":
         data["report_to"] = []
     elif isinstance(data["report_to"], str) and "," in data["report_to"]:
@@ -286,10 +334,13 @@ def setup_apple_silicon_optimizations() -> None:
     # Enable Metal optimizations
     os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
-    # Set optimal memory allocator for macOS
+    # Set optimal memory allocator for macOS (must be between 0.0 and 1.0)
+    # Use conservative 50% for 16GB to avoid OOM and invalid ratio errors
     if "PYTORCH_MPS_HIGH_WATERMARK_RATIO" not in os.environ:
-        # Use 70% of available memory for MPS (conservative for 16GB)
-        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.7"
+        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.5"
+
+    # Disable the problematic caching allocator warmup that causes the error
+    os.environ["PYTORCH_MPS_ALLOCATOR_POLICY"] = "garbage_collection"
 
     # Enable Accelerate framework optimizations
     if "TOKENIZERS_PARALLELISM" not in os.environ:
@@ -300,6 +351,9 @@ def setup_apple_silicon_optimizations() -> None:
     print(f"  • CPU threads: {os.environ.get('OMP_NUM_THREADS', 'default')}")
     print(
         f"  • Memory watermark: {os.environ.get('PYTORCH_MPS_HIGH_WATERMARK_RATIO', 'default')}"
+    )
+    print(
+        f"  • Allocator policy: {os.environ.get('PYTORCH_MPS_ALLOCATOR_POLICY', 'default')}"
     )
 
 
@@ -322,7 +376,7 @@ def main() -> None:
         num_train_epochs=config.num_train_epochs,
         max_steps=config.max_steps,
         learning_rate=config.learning_rate,
-        warmup_ratio=config.warmup_ratio,
+        warmup_steps=config.warmup_steps,
         per_device_train_batch_size=config.per_device_train_batch_size,
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         num_generations=config.num_generations,

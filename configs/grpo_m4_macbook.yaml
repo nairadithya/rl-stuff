@@ -13,7 +13,7 @@ seed: 42
 num_train_epochs: 1.0
 max_steps: 200
 learning_rate: 1.0e-6
-warmup_ratio: 0.03
+warmup_steps: 6
 
 # Memory-optimized batch sizes for 16GB RAM
 per_device_train_batch_size: 1
