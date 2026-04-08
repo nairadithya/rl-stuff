@@ -1,0 +1,56 @@
+# Optimized configuration for M4 MacBook Air with 16GB RAM
+# Uses Apple Silicon MPS backend and memory-efficient settings
+
+model_name: Qwen/Qwen2.5-0.5B-Instruct
+dataset_name: trl-lib/DeepMath-103K
+dataset_split: train
+max_samples: 2000  # Reduced for 16GB RAM constraint
+
+output_dir: outputs/grpo-qwen2.5-0.5b-m4
+run_name: grpo-m4-macbook
+seed: 42
+
+num_train_epochs: 1.0
+max_steps: 200
+learning_rate: 1.0e-6
+warmup_ratio: 0.03
+
+# Memory-optimized batch sizes for 16GB RAM
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 4  # Reduced from 8 to limit memory
+num_generations: 4  # Reduced from 8 to limit memory
+
+# Shorter completions to save memory
+max_completion_length: 128  # Reduced from 256
+
+beta: 0.0
+scale_rewards: group
+loss_type: dapo
+reward_type: accuracy
+
+# vLLM not supported on MPS, keep disabled
+use_vllm: false
+
+# Memory-efficient training settings
+gradient_checkpointing: true  # Essential for 16GB RAM
+
+# Use bf16 for M4's optimized bfloat16 support
+bf16: true  # M4 has hardware acceleration for bf16
+fp16: false
+
+report_to: none
+log_completions: true
+
+# Use LoRA for memory efficiency (critical for 16GB)
+use_peft: true
+lora_r: 8  # Reduced rank for lower memory
+lora_alpha: 16  # Scaled with r
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
+  - up_proj
+  - down_proj
+  - gate_proj

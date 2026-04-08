@@ -1,0 +1,39 @@
+model_name: Qwen/Qwen2.5-0.5B-Instruct
+dataset_name: trl-lib/DeepMath-103K
+dataset_split: train
+max_samples: 128
+output_dir: outputs/grpo-smoke
+run_name: grpo-smoke
+seed: 42
+
+num_train_epochs: 1.0
+max_steps: 10
+learning_rate: 1.0e-6
+warmup_ratio: 0.03
+
+per_device_train_batch_size: 1
+gradient_accumulation_steps: 8
+num_generations: 8
+max_completion_length: 128
+
+beta: 0.0
+scale_rewards: group
+loss_type: dapo
+reward_type: length
+
+use_vllm: false
+gradient_checkpointing: true
+bf16: false
+fp16: false
+report_to: none
+log_completions: false
+
+use_peft: true
+lora_r: 8
+lora_alpha: 16
+lora_dropout: 0.05
+lora_target_modules:
+  - q_proj
+  - k_proj
+  - v_proj
+  - o_proj
