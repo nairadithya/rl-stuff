@@ -17,8 +17,8 @@ echo ""
 # Use the custom accelerate config for M4 if it exists
 if [ -f "configs/accelerate_m4.yaml" ]; then
     echo "Using M4-optimized Accelerate configuration"
-    accelerate launch --config_file configs/accelerate_m4.yaml train_grpo.py --config configs/grpo_m4_macbook.yaml "$@"
+    uv run accelerate launch --config_file configs/accelerate_m4.yaml train_grpo.py --config configs/grpo_m4_macbook.yaml "$@"
 else
     echo "Using default Accelerate configuration"
-    accelerate launch train_grpo.py --config configs/grpo_m4_macbook.yaml "$@"
+    uv run accelerate launch train_grpo.py --config configs/grpo_m4_macbook.yaml "$@"
 fi
