@@ -42,12 +42,16 @@ _configure_mps_env()
 from datasets import load_dataset
 from peft import LoraConfig
 from trl import GRPOConfig, GRPOTrainer
-from trl.rewards import accuracy_reward
 import torch
 import yaml
 
 from grpo_config import TrainingConfig
-from reward_fns import format_reward, length_reward
+from reward_fns import (
+    accuracy_format_reward,
+    format_reward,
+    length_reward,
+    robust_accuracy_reward,
+)
 
 
 def parse_args() -> argparse.Namespace:
@@ -106,6 +110,24 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--max-completion-length", type=int, default=None, help="Completion length cap."
     )
+    parser.add_argument(
+        "--temperature",
+        type=float,
+        default=None,
+        help="Sampling temperature used for rollouts.",
+    )
+    parser.add_argument(
+        "--top-p",
+        type=float,
+        default=None,
+        help="Nucleus sampling parameter used for rollouts.",
+    )
+    parser.add_argument(
+        "--repetition-penalty",
+        type=float,
+        default=None,
+        help="Repetition penalty during rollout generation.",
+    )
     parser.add_argument("--beta", type=float, default=None, help="KL beta coefficient.")
     parser.add_argument(
         "--scale-rewards",
@@ -120,9 +142,19 @@ def parse_args() -> argparse.Namespace:
         help="GRPO loss variant.",
     )
     parser.add_argument(
+        "--mask-truncated-completions",
+        action="store_true",
+        help="Mask truncated completions in policy loss.",
+    )
+    parser.add_argument(
+        "--no-mask-truncated-completions",
+        action="store_true",
+        help="Disable masking for truncated completions.",
+    )
+    parser.add_argument(
         "--reward-type",
         default=None,
-        choices=["accuracy", "format", "length"],
+        choices=["accuracy", "accuracy_format", "format", "length"],
         help="Built-in reward to use.",
     )
     parser.add_argument(
@@ -223,6 +255,9 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
         "num_generations": args.num_generations,
         "max_completion_length": args.max_completion_length,
+        "temperature": args.temperature,
+        "top_p": args.top_p,
+        "repetition_penalty": args.repetition_penalty,
         "beta": args.beta,
         "scale_rewards": args.scale_rewards,
         "loss_type": args.loss_type,
@@ -259,6 +294,11 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         data["log_completions"] = True
     if args.no_log_completions:
         data["log_completions"] = False
+
+    if args.mask_truncated_completions:
+        data["mask_truncated_completions"] = True
+    if args.no_mask_truncated_completions:
+        data["mask_truncated_completions"] = False
 
     if args.use_peft:
         data["use_peft"] = True
@@ -297,10 +337,13 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
 
 def get_reward_function(reward_type: str):
     if reward_type == "accuracy":
-        return accuracy_reward
+        return robust_accuracy_reward
 
     if reward_type == "format":
         return format_reward
+
+    if reward_type == "accuracy_format":
+        return accuracy_format_reward
 
     if reward_type == "length":
         return length_reward
@@ -357,6 +400,34 @@ def setup_apple_silicon_optimizations() -> None:
     )
 
 
+def sanitize_tokenizer_special_tokens(trainer: GRPOTrainer) -> None:
+    tokenizer = getattr(trainer, "processing_class", None)
+    model_config = getattr(getattr(trainer, "model", None), "config", None)
+    generation_config = getattr(getattr(trainer, "model", None), "generation_config", None)
+
+    if tokenizer is None:
+        return
+
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        tokenizer.pad_token = tokenizer.eos_token
+
+    if model_config is not None:
+        if tokenizer.pad_token_id is not None:
+            model_config.pad_token_id = tokenizer.pad_token_id
+        if tokenizer.eos_token_id is not None:
+            model_config.eos_token_id = tokenizer.eos_token_id
+        if tokenizer.bos_token_id is not None:
+            model_config.bos_token_id = tokenizer.bos_token_id
+
+    if generation_config is not None:
+        if tokenizer.pad_token_id is not None:
+            generation_config.pad_token_id = tokenizer.pad_token_id
+        if tokenizer.eos_token_id is not None:
+            generation_config.eos_token_id = tokenizer.eos_token_id
+        if tokenizer.bos_token_id is not None:
+            generation_config.bos_token_id = tokenizer.bos_token_id
+
+
 def main() -> None:
     # Setup Apple Silicon optimizations before initializing models
     setup_apple_silicon_optimizations()
@@ -381,9 +452,13 @@ def main() -> None:
         gradient_accumulation_steps=config.gradient_accumulation_steps,
         num_generations=config.num_generations,
         max_completion_length=config.max_completion_length,
+        temperature=config.temperature,
+        top_p=config.top_p,
+        repetition_penalty=config.repetition_penalty,
         beta=config.beta,
         scale_rewards=config.scale_rewards,
         loss_type=config.loss_type,
+        mask_truncated_completions=config.mask_truncated_completions,
         logging_steps=config.logging_steps,
         save_steps=config.save_steps,
         save_total_limit=config.save_total_limit,
@@ -394,6 +469,7 @@ def main() -> None:
         log_completions=config.log_completions,
         use_vllm=config.use_vllm,
         seed=config.seed,
+        dataloader_pin_memory=not torch.backends.mps.is_available(),
     )
 
     trainer_kwargs = {
@@ -407,6 +483,7 @@ def main() -> None:
         trainer_kwargs["peft_config"] = build_peft_config(config)
 
     trainer = GRPOTrainer(**trainer_kwargs)
+    sanitize_tokenizer_special_tokens(trainer)
     trainer.train(resume_from_checkpoint=config.resume_from_checkpoint)
     trainer.save_model(config.output_dir)
 

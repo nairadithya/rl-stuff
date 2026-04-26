@@ -21,11 +21,15 @@ class TrainingConfig:
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 8
     num_generations: int = 8
-    max_completion_length: int = 256
+    max_completion_length: int = 384
+    temperature: float = 0.7
+    top_p: float = 0.95
+    repetition_penalty: float = 1.05
     beta: float = 0.0
     scale_rewards: str = "group"
     loss_type: str = "dapo"
-    reward_type: str = "accuracy"
+    mask_truncated_completions: bool = True
+    reward_type: str = "accuracy_format"
     use_vllm: bool = False
     gradient_checkpointing: bool = True
     bf16: bool = False

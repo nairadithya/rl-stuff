@@ -17,6 +17,8 @@ dependencies = [
     "trl>=0.12.1",
     "pyyaml>=6.0.2",
     "math-verify>=0.9.0",
+    "tqdm>=4.67.0",
+    "mlx-lm>=0.31.2",
 ]
 
 [project.optional-dependencies]
@@ -24,6 +26,10 @@ dev = ["ruff>=0.9.0"]
 
 [project.scripts]
 grpo-train = "train_grpo:main"
+grpo-eval = "eval_grpo:main"
+grpo-eval-mlx = "eval_grpo_mlx:main"
+grpo-prelim = "run_prelim:main"
+grpo-compare = "compare_runs:main"
 
 [tool.hatch.build.targets.wheel]
 include = ["*.py"]
