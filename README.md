@@ -19,6 +19,8 @@ Minimal scaffold to train small language models with **Group Relative Policy Opt
 - `scripts/run_smoke.sh`: helper to run smoke training
 - `scripts/run_m4_macbook.sh`: helper to run on M4 MacBook Air
 - `scripts/run_prelim.sh`: helper to run the full preliminary pipeline
+- `ui/model_testing_ui.py`: Streamlit UI to inspect results and prompt models
+- `scripts/run_ui.sh`: helper to launch the Streamlit UI
 
 ## Requirements
 
@@ -171,6 +173,33 @@ accelerate launch train_grpo.py --help
 uv run python eval_grpo.py --help
 uv run python run_prelim.py --help
 uv run python compare_runs.py --help
+```
+
+## Model testing UI
+
+Launch a basic Streamlit UI to inspect run outputs and quickly prompt a selected model:
+
+```bash
+./scripts/run_ui.sh
+```
+
+The UI includes:
+
+- Results browser for `outputs/prelim/<experiment_id>` runs
+- Per-run baseline/tuned metrics and prediction tables
+- Experiment leaderboard preview
+- Prompt playground with a small model dropdown and generation controls
+
+Model options in the prompt panel include:
+
+- `Qwen/Qwen2.5-0.5B-Instruct`
+- `Qwen/Qwen2.5-1.5B-Instruct`
+- discovered local checkpoints under `outputs/`
+
+If no experiment appears, run the preliminary pipeline first:
+
+```bash
+./scripts/run_prelim.sh
 ```
 
 Override config values from CLI:
