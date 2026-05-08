@@ -46,7 +46,9 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="YAML config file path (values overridden by explicit CLI flags).",
     )
-    parser.add_argument("--model-name-or-path", default=None, help="Model or checkpoint path.")
+    parser.add_argument(
+        "--model-name-or-path", default=None, help="Model or checkpoint path."
+    )
     parser.add_argument(
         "--tokenizer-name-or-path",
         default=None,
@@ -54,22 +56,30 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--dataset-name", default=None, help="HF dataset name.")
     parser.add_argument("--dataset-split", default=None, help="Dataset split.")
-    parser.add_argument("--max-samples", type=int, default=None, help="Optional dataset size cap.")
-    parser.add_argument("--max-new-tokens", type=int, default=None, help="Max generated tokens.")
+    parser.add_argument(
+        "--max-samples", type=int, default=None, help="Optional dataset size cap."
+    )
+    parser.add_argument(
+        "--max-new-tokens", type=int, default=None, help="Max generated tokens."
+    )
     parser.add_argument(
         "--temperature",
         type=float,
         default=None,
         help="Sampling temperature. Set 0 for greedy decoding.",
     )
-    parser.add_argument("--top-p", type=float, default=None, help="Nucleus sampling parameter.")
+    parser.add_argument(
+        "--top-p", type=float, default=None, help="Nucleus sampling parameter."
+    )
     parser.add_argument(
         "--repetition-penalty",
         type=float,
         default=None,
         help="Repetition penalty during generation.",
     )
-    parser.add_argument("--batch-size", type=int, default=None, help="Evaluation batch size.")
+    parser.add_argument(
+        "--batch-size", type=int, default=None, help="Evaluation batch size."
+    )
     parser.add_argument(
         "--log-every",
         type=int,
@@ -82,7 +92,9 @@ def parse_args() -> argparse.Namespace:
         help="Disable tqdm progress bar.",
     )
     parser.add_argument("--seed", type=int, default=None, help="Random seed.")
-    parser.add_argument("--output-dir", default=None, help="Directory for metrics and predictions.")
+    parser.add_argument(
+        "--output-dir", default=None, help="Directory for metrics and predictions."
+    )
     return parser.parse_args()
 
 
@@ -208,7 +220,9 @@ def _load_model(model_name_or_path: str, device: str, dtype: torch.dtype):
         load_kwargs["device_map"] = "auto"
 
     try:
-        model = AutoPeftModelForCausalLM.from_pretrained(model_name_or_path, **load_kwargs)
+        model = AutoPeftModelForCausalLM.from_pretrained(
+            model_name_or_path, **load_kwargs
+        )
     except Exception:
         model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **load_kwargs)
 
@@ -312,7 +326,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
     processed_examples = 0
 
     batch_iterator = _batch_iter(examples, config.batch_size)
-    total_batches = math.ceil(total_examples / config.batch_size) if total_examples else 0
+    total_batches = (
+        math.ceil(total_examples / config.batch_size) if total_examples else 0
+    )
     if config.show_progress_bar:
         batch_iterator = tqdm(
             batch_iterator,
@@ -322,7 +338,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
         )
 
     for start_index, batch in batch_iterator:
-        batch_prompts = [_format_prompt(example["prompt"], tokenizer) for example in batch]
+        batch_prompts = [
+            _format_prompt(example["prompt"], tokenizer) for example in batch
+        ]
         tokenized = tokenizer(
             batch_prompts,
             return_tensors="pt",
@@ -364,7 +382,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
                 and tokenizer.eos_token_id is not None
                 and completion_ids[-1] == tokenizer.eos_token_id
             )
-            truncated = completion_length >= config.max_new_tokens and not ended_with_eos
+            truncated = (
+                completion_length >= config.max_new_tokens and not ended_with_eos
+            )
 
             accuracy_value = _as_python_float(accuracy_scores[offset])
             format_value = float(format_scores[offset])
@@ -391,7 +411,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
         if config.show_progress_bar and hasattr(batch_iterator, "set_postfix"):
             current_accuracy = [v for v in all_accuracy if v is not None]
             mean_acc = (
-                sum(current_accuracy) / len(current_accuracy) if current_accuracy else None
+                sum(current_accuracy) / len(current_accuracy)
+                if current_accuracy
+                else None
             )
             postfix = {
                 "examples": processed_examples,
@@ -403,7 +425,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
             elapsed = max(time.time() - start_time, 1e-8)
             current_accuracy = [v for v in all_accuracy if v is not None]
             mean_acc = (
-                sum(current_accuracy) / len(current_accuracy) if current_accuracy else None
+                sum(current_accuracy) / len(current_accuracy)
+                if current_accuracy
+                else None
             )
             mean_format = sum(all_format) / len(all_format) if all_format else 0.0
             print(
@@ -437,7 +461,9 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
         "avg_completion_tokens": (
             sum(all_lengths) / len(all_lengths) if all_lengths else 0.0
         ),
-        "median_completion_tokens": statistics.median(all_lengths) if all_lengths else 0.0,
+        "median_completion_tokens": statistics.median(all_lengths)
+        if all_lengths
+        else 0.0,
         "truncation_rate": (
             sum(1.0 for flag in all_truncated if flag) / len(all_truncated)
             if all_truncated

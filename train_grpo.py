@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ast
 import os
+import signal
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -41,6 +42,7 @@ _configure_mps_env()
 
 from datasets import load_dataset
 from peft import LoraConfig
+from transformers import TrainerCallback
 from trl import GRPOConfig, GRPOTrainer
 import torch
 import yaml
@@ -52,6 +54,22 @@ from reward_fns import (
     length_reward,
     robust_accuracy_reward,
 )
+
+_interrupted = False
+
+
+def _signal_handler(signum: int, frame) -> None:
+    global _interrupted
+    _interrupted = True
+    name = signal.Signals(signum).name
+    sys.stderr.write(
+        f"\n[{name}] Interrupt received. Will save checkpoint at end of current step.\n"
+    )
+    sys.stderr.flush()
+
+
+signal.signal(signal.SIGTERM, _signal_handler)
+signal.signal(signal.SIGINT, _signal_handler)
 
 
 def parse_args() -> argparse.Namespace:
@@ -192,6 +210,16 @@ def parse_args() -> argparse.Namespace:
         help="Path to checkpoint to resume from.",
     )
     parser.add_argument(
+        "--auto-resume",
+        action="store_true",
+        help="Auto-resume from latest checkpoint in output_dir.",
+    )
+    parser.add_argument(
+        "--no-auto-resume",
+        action="store_true",
+        help="Disable auto-resume from checkpoint.",
+    )
+    parser.add_argument(
         "--use-peft", action="store_true", help="Enable LoRA fine-tuning."
     )
     parser.add_argument(
@@ -304,6 +332,11 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         data["use_peft"] = True
     if args.no_use_peft:
         data["use_peft"] = False
+
+    if args.auto_resume:
+        data["auto_resume"] = True
+    if args.no_auto_resume:
+        data["auto_resume"] = False
 
     if args.lora_target_modules:
         parsed = ast.literal_eval(args.lora_target_modules)
@@ -428,6 +461,20 @@ def sanitize_tokenizer_special_tokens(trainer: GRPOTrainer) -> None:
             generation_config.bos_token_id = tokenizer.bos_token_id
 
 
+class SpotInterruptCallback(TrainerCallback):
+    def on_step_end(self, args, state, control, **kwargs):
+        global _interrupted
+        if _interrupted:
+            control.should_save = True
+            control.should_training_stop = True
+
+    def on_log(self, args, state, control, logs=None, **kwargs):
+        global _interrupted
+        if _interrupted:
+            control.should_save = True
+            control.should_training_stop = True
+
+
 def main() -> None:
     # Setup Apple Silicon optimizations before initializing models
     setup_apple_silicon_optimizations()
@@ -483,8 +530,21 @@ def main() -> None:
         trainer_kwargs["peft_config"] = build_peft_config(config)
 
     trainer = GRPOTrainer(**trainer_kwargs)
+    trainer.add_callback(SpotInterruptCallback())
     sanitize_tokenizer_special_tokens(trainer)
-    trainer.train(resume_from_checkpoint=config.resume_from_checkpoint)
+
+    resume = config.resume_from_checkpoint
+    if resume is None and config.auto_resume:
+        output = Path(config.output_dir)
+        checkpoints = sorted(output.glob("checkpoint-*"))
+        if checkpoints:
+            resume = str(checkpoints[-1])
+            print(
+                f"Auto-resuming from latest checkpoint: {resume}",
+                flush=True,
+            )
+
+    trainer.train(resume_from_checkpoint=resume)
     trainer.save_model(config.output_dir)
 
 

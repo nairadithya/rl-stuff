@@ -35,7 +35,9 @@ def _resolve_dtype(device: str) -> torch.dtype:
     return torch.float32
 
 
-def _load_transformers_model(model_name_or_path: str):
+def _load_transformers_model(
+    model_name_or_path: str, tokenizer_name_or_path: str | None
+):
     device = _resolve_device()
     dtype = _resolve_dtype(device)
 
@@ -54,7 +56,8 @@ def _load_transformers_model(model_name_or_path: str):
         model = model.to(device)
     model.eval()
 
-    tokenizer = AutoTokenizer.from_pretrained(model_name_or_path, use_fast=True)
+    tokenizer_source = tokenizer_name_or_path or model_name_or_path
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
         tokenizer.pad_token = tokenizer.eos_token
@@ -74,14 +77,16 @@ def _load_mlx_model(model_name_or_path: str):
     return {"backend": "mlx", "device": "mlx", "model": model, "tokenizer": tokenizer}
 
 
-def load_model_bundle(model_name_or_path: str) -> dict[str, Any]:
+def load_model_bundle(
+    model_name_or_path: str, tokenizer_name_or_path: str | None = None
+) -> dict[str, Any]:
     mlx_spec = importlib.util.find_spec("mlx_lm")
     if mlx_spec is not None:
         try:
             return _load_mlx_model(model_name_or_path)
         except Exception:
             pass
-    return _load_transformers_model(model_name_or_path)
+    return _load_transformers_model(model_name_or_path, tokenizer_name_or_path)
 
 
 def _generate_with_transformers(

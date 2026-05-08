@@ -101,8 +101,10 @@ def _show_run_results(run: RunArtifacts) -> None:
 
 
 @st.cache_resource(show_spinner=False)
-def _cached_model_bundle(model_name_or_path: str) -> dict[str, Any]:
-    return load_model_bundle(model_name_or_path)
+def _cached_model_bundle(
+    model_name_or_path: str, tokenizer_name_or_path: str | None
+) -> dict[str, Any]:
+    return load_model_bundle(model_name_or_path, tokenizer_name_or_path)
 
 
 def _prompt_panel() -> None:
@@ -116,6 +118,13 @@ def _prompt_panel() -> None:
         placeholder="outputs/grpo-qwen2.5-0.5b",
     ).strip()
     model_name_or_path = custom_model or selected_model
+
+    custom_tokenizer = st.text_input(
+        "Tokenizer path (optional)",
+        value="",
+        placeholder="Qwen/Qwen2.5-0.5B-Instruct",
+    ).strip()
+    tokenizer_name_or_path = custom_tokenizer or None
 
     c1, c2, c3, c4 = st.columns(4)
     max_new_tokens = c1.number_input(
@@ -151,7 +160,9 @@ def _prompt_panel() -> None:
 
         try:
             with st.spinner(f"Loading {model_name_or_path}..."):
-                model_bundle = _cached_model_bundle(model_name_or_path)
+                model_bundle = _cached_model_bundle(
+                    model_name_or_path, tokenizer_name_or_path
+                )
             with st.spinner("Generating..."):
                 completion = generate_text(
                     model_bundle=model_bundle, prompt=prompt, config=config

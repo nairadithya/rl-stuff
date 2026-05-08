@@ -37,22 +37,45 @@ class MlxEvalConfig:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Run post-training evaluation using MLX when available.")
+    parser = argparse.ArgumentParser(
+        description="Run post-training evaluation using MLX when available."
+    )
     parser.add_argument("--config", default=None, help="YAML config file path.")
-    parser.add_argument("--model-name-or-path", default=None, help="Model or checkpoint path.")
-    parser.add_argument("--tokenizer-name-or-path", default=None, help="Optional tokenizer path.")
+    parser.add_argument(
+        "--model-name-or-path", default=None, help="Model or checkpoint path."
+    )
+    parser.add_argument(
+        "--tokenizer-name-or-path", default=None, help="Optional tokenizer path."
+    )
     parser.add_argument("--dataset-name", default=None, help="HF dataset name.")
     parser.add_argument("--dataset-split", default=None, help="Dataset split.")
     parser.add_argument("--max-samples", type=int, default=None, help="Sample cap.")
-    parser.add_argument("--max-new-tokens", type=int, default=None, help="Max generated tokens.")
-    parser.add_argument("--temperature", type=float, default=None, help="Sampling temperature.")
-    parser.add_argument("--top-p", type=float, default=None, help="Top-p nucleus sampling.")
-    parser.add_argument("--repetition-penalty", type=float, default=None, help="Repetition penalty.")
-    parser.add_argument("--batch-size", type=int, default=None, help="Unused; accepted for CLI compatibility.")
+    parser.add_argument(
+        "--max-new-tokens", type=int, default=None, help="Max generated tokens."
+    )
+    parser.add_argument(
+        "--temperature", type=float, default=None, help="Sampling temperature."
+    )
+    parser.add_argument(
+        "--top-p", type=float, default=None, help="Top-p nucleus sampling."
+    )
+    parser.add_argument(
+        "--repetition-penalty", type=float, default=None, help="Repetition penalty."
+    )
+    parser.add_argument(
+        "--batch-size",
+        type=int,
+        default=None,
+        help="Unused; accepted for CLI compatibility.",
+    )
     parser.add_argument("--seed", type=int, default=None, help="Random seed.")
     parser.add_argument("--output-dir", default=None, help="Output directory.")
-    parser.add_argument("--log-every", type=int, default=None, help="Periodic log interval.")
-    parser.add_argument("--no-progress-bar", action="store_true", help="Disable progress bar.")
+    parser.add_argument(
+        "--log-every", type=int, default=None, help="Periodic log interval."
+    )
+    parser.add_argument(
+        "--no-progress-bar", action="store_true", help="Disable progress bar."
+    )
     parser.add_argument(
         "--no-fallback-to-transformers",
         action="store_true",
@@ -78,7 +101,9 @@ def merge_config(defaults: MlxEvalConfig, args: argparse.Namespace) -> MlxEvalCo
         file_overrides = _load_yaml(args.config)
         unknown = [key for key in file_overrides if key not in data]
         if unknown:
-            raise ValueError(f"Unknown keys in config file: {', '.join(sorted(unknown))}")
+            raise ValueError(
+                f"Unknown keys in config file: {', '.join(sorted(unknown))}"
+            )
         data.update(file_overrides)
 
     overrides = {
@@ -142,11 +167,12 @@ def _format_prompt(prompt: Any) -> str:
     return str(prompt)
 
 
-def _evaluate_with_transformers_fallback(config: MlxEvalConfig, reason: str) -> dict[str, Any]:
+def _evaluate_with_transformers_fallback(
+    config: MlxEvalConfig, reason: str
+) -> dict[str, Any]:
     if not config.fallback_to_transformers:
         raise RuntimeError(
-            "MLX backend unavailable and fallback disabled. "
-            f"Reason: {reason}"
+            f"MLX backend unavailable and fallback disabled. Reason: {reason}"
         )
 
     print(f"MLX backend unavailable; falling back to transformers. Reason: {reason}")
@@ -161,6 +187,7 @@ def _evaluate_with_transformers_fallback(config: MlxEvalConfig, reason: str) -> 
         max_new_tokens=config.max_new_tokens,
         temperature=config.temperature,
         top_p=config.top_p,
+        repetition_penalty=config.repetition_penalty,
         batch_size=1,
         seed=config.seed,
         output_dir=config.output_dir,
@@ -173,7 +200,9 @@ def _evaluate_with_transformers_fallback(config: MlxEvalConfig, reason: str) -> 
         on_disk = json.loads(metrics_path.read_text(encoding="utf-8"))
         on_disk["backend"] = "transformers_fallback"
         on_disk["backend_note"] = reason
-        metrics_path.write_text(json.dumps(on_disk, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+        metrics_path.write_text(
+            json.dumps(on_disk, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
         metrics = on_disk
     return metrics
 
@@ -181,7 +210,9 @@ def _evaluate_with_transformers_fallback(config: MlxEvalConfig, reason: str) -> 
 def evaluate(config: MlxEvalConfig) -> dict[str, Any]:
     mlx_spec = importlib.util.find_spec("mlx_lm")
     if mlx_spec is None:
-        return _evaluate_with_transformers_fallback(config, "mlx_lm package not installed")
+        return _evaluate_with_transformers_fallback(
+            config, "mlx_lm package not installed"
+        )
 
     from mlx_lm import generate, load
     from mlx_lm.sample_utils import make_logits_processors, make_sampler
@@ -275,7 +306,9 @@ def evaluate(config: MlxEvalConfig) -> dict[str, Any]:
 
     iterator = enumerate(examples)
     if config.show_progress_bar:
-        iterator = tqdm(iterator, total=total_examples, desc="Evaluating (MLX)", unit="example")
+        iterator = tqdm(
+            iterator, total=total_examples, desc="Evaluating (MLX)", unit="example"
+        )
 
     for idx, example in iterator:
         prompt_text = _format_prompt(example["prompt"])
@@ -295,7 +328,9 @@ def evaluate(config: MlxEvalConfig) -> dict[str, Any]:
         solutions = [str(example["solution"])]
 
         accuracy_value = float(
-            robust_accuracy_reward(completions=completion_messages, solution=solutions)[0]
+            robust_accuracy_reward(completions=completion_messages, solution=solutions)[
+                0
+            ]
         )
         format_value = float(format_reward(completions=completion_messages)[0])
 
@@ -341,12 +376,18 @@ def evaluate(config: MlxEvalConfig) -> dict[str, Any]:
         "dataset_name": config.dataset_name,
         "dataset_split": config.dataset_split,
         "num_examples": len(predictions),
-        "accuracy_mean": sum(all_accuracy) / len(all_accuracy) if all_accuracy else None,
+        "accuracy_mean": sum(all_accuracy) / len(all_accuracy)
+        if all_accuracy
+        else None,
         "accuracy_valid_examples": len(all_accuracy),
         "accuracy_valid_fraction": 1.0 if predictions else 0.0,
         "format_rate": sum(all_format) / len(all_format) if all_format else 0.0,
-        "avg_completion_tokens": sum(all_lengths) / len(all_lengths) if all_lengths else 0.0,
-        "median_completion_tokens": statistics.median(all_lengths) if all_lengths else 0.0,
+        "avg_completion_tokens": sum(all_lengths) / len(all_lengths)
+        if all_lengths
+        else 0.0,
+        "median_completion_tokens": statistics.median(all_lengths)
+        if all_lengths
+        else 0.0,
         "truncation_rate": (
             sum(1.0 for flag in all_truncated if flag) / len(all_truncated)
             if all_truncated
@@ -365,7 +406,9 @@ def evaluate(config: MlxEvalConfig) -> dict[str, Any]:
     }
 
     metrics_path = output_dir / "metrics.json"
-    metrics_path.write_text(json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    metrics_path.write_text(
+        json.dumps(metrics, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+    )
 
     predictions_path = output_dir / "predictions.jsonl"
     with predictions_path.open("w", encoding="utf-8") as handle:

@@ -37,6 +37,7 @@ class TrainingConfig:
     report_to: str | list[str] = "none"
     log_completions: bool = True
     resume_from_checkpoint: str | None = None
+    auto_resume: bool = False
     use_peft: bool = True
     lora_r: int = 16
     lora_alpha: int = 32

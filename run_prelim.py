@@ -35,6 +35,9 @@ class PrelimConfig:
     num_generations: int = 4
     per_device_train_batch_size: int = 1
     gradient_accumulation_steps: int = 4
+    loss_types: list[str] | None = None
+    beta: float = 0.0
+    num_train_epochs: float = 1.0
     output_root: str = "outputs/prelim"
     train_config: str | None = None
     eval_config: str | None = None
@@ -150,6 +153,24 @@ def parse_args() -> argparse.Namespace:
         help="Training gradient accumulation steps.",
     )
     parser.add_argument(
+        "--loss-types",
+        nargs="+",
+        default=None,
+        help="Loss types to sweep over (grpo, dapo, dr_grpo, etc.).",
+    )
+    parser.add_argument(
+        "--beta",
+        type=float,
+        default=None,
+        help="KL penalty coefficient.",
+    )
+    parser.add_argument(
+        "--num-train-epochs",
+        type=float,
+        default=None,
+        help="Number of training epochs.",
+    )
+    parser.add_argument(
         "--output-root",
         default=None,
         help="Output root directory for all artifacts.",
@@ -256,6 +277,8 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
         "num_generations": args.num_generations,
         "per_device_train_batch_size": args.per_device_train_batch_size,
         "gradient_accumulation_steps": args.gradient_accumulation_steps,
+        "beta": args.beta,
+        "num_train_epochs": args.num_train_epochs,
         "output_root": args.output_root,
         "train_config": args.train_config,
         "eval_config": args.eval_config,
@@ -275,6 +298,9 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
 
     if args.tuned_model_paths is not None:
         data["tuned_model_paths"] = args.tuned_model_paths
+
+    if args.loss_types is not None:
+        data["loss_types"] = args.loss_types
 
     if args.skip_training:
         data["skip_training"] = True
@@ -450,6 +476,9 @@ def _train_model(
     train_config: str | None,
     use_accelerate: bool,
     accelerate_config: str | None,
+    loss_type: str | None = None,
+    beta: float | None = None,
+    num_train_epochs: float | None = None,
 ) -> None:
     if use_accelerate:
         command = [python_bin, "-m", "accelerate.commands.launch"]

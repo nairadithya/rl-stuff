@@ -175,6 +175,17 @@ uv run python run_prelim.py --help
 uv run python compare_runs.py --help
 ```
 
+### CPU-friendly evaluation (larger sample)
+
+If you run a fast end-to-end pipeline with tiny eval sizes, use this to get a more stable
+accuracy estimate on CPU:
+
+```bash
+uv run python eval_grpo.py \
+  --config configs/eval_cpu.yaml \
+  --model-name-or-path outputs/prelim/<experiment_id>/<model_slug>/train
+```
+
 ## Model testing UI
 
 Launch a basic Streamlit UI to inspect run outputs and quickly prompt a selected model:
@@ -276,4 +287,33 @@ uv run python compare_runs.py \
 - Training in `run_prelim.py` uses `accelerate` by default; disable with `--no-use-accelerate` if needed.
 - Current prelim defaults favor reduced truncation (`max_completion_length=192`) and denser rewards (`accuracy_format`).
 - Training now exposes rollout quality knobs (`temperature`, `top_p`, `repetition_penalty`) and `mask_truncated_completions`.
-- Preliminary pipeline defaults to `eval_backend: mlx` with fallback enabled for machines without `mlx-lm`.
+- Preliminary pipeline defaults to `eval_backend: transformers`.
+
+## RunPod setup
+
+This repo is RunPod-ready with a CUDA base image and pip install.
+
+### Option A: Use the Dockerfile
+
+Build and run locally (or on a compatible registry):
+
+```bash
+docker build -t grpo-small-lm:latest .
+docker run --gpus all -it --rm grpo-small-lm:latest
+```
+
+### Option B: Use a RunPod startup command
+
+On a RunPod pod (or any CUDA VM), run:
+
+```bash
+./runpod_start.sh
+```
+
+### MLX (Apple Silicon only)
+
+MLX dependencies are optional. On Apple Silicon machines:
+
+```bash
+pip install -e ".[mlx]"
+```

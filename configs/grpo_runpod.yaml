@@ -1,26 +1,26 @@
 model_name: Qwen/Qwen2.5-0.5B-Instruct
 dataset_name: trl-lib/DeepMath-103K
 dataset_split: train
-max_samples: 200
-output_dir: outputs/grpo-qwen2.5-0.5b
-run_name: grpo-small-lm
+output_dir: /workspace/outputs/grpo-qwen2.5-0.5b
+run_name: grpo-runpod
 seed: 42
 
 num_train_epochs: 1.0
-max_steps: 20
+max_steps: -1
 learning_rate: 1.0e-6
-warmup_steps: 9
+warmup_steps: 20
+warmup_ratio: null
 
 per_device_train_batch_size: 1
-gradient_accumulation_steps: 4
-num_generations: 1
+gradient_accumulation_steps: 8
+num_generations: 8
 
-max_completion_length: 128
+max_completion_length: 384
 temperature: 0.7
 top_p: 0.95
 repetition_penalty: 1.05
 
-beta: 0.0
+beta: 0.01
 scale_rewards: group
 loss_type: dapo
 mask_truncated_completions: true
@@ -28,10 +28,14 @@ reward_type: accuracy_format
 
 use_vllm: false
 gradient_checkpointing: true
-bf16: false
+bf16: true
 fp16: false
 report_to: none
 log_completions: true
+
+logging_steps: 5
+save_steps: 50
+save_total_limit: 3
 
 use_peft: true
 lora_r: 16
