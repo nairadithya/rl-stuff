@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.1.1-cudnn8-runtime-ubuntu22.04
+FROM nvidia/cuda:12.4.1-cudnn-runtime-ubuntu22.04
 
 ARG PRECACHE_MODELS=false
 
@@ -18,7 +18,7 @@ ENV PIP_ROOT_USER_ACTION=ignore
 RUN python3 -m pip install --upgrade pip
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --ignore-installed --extra-index-url https://download.pytorch.org/whl/cu121 \
+RUN pip install --ignore-installed --extra-index-url https://download.pytorch.org/whl/cu124 \
     -r requirements.txt
 
 COPY . .

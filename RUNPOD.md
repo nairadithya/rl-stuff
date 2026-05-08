@@ -14,12 +14,12 @@ A **single** RTX 4090 spot is the sweet spot. Multi-GPU not worth it at this mod
 
 ## Base Template
 
-Use `runpod/pytorch:2.5.1-py3.11-cuda12.4.1-devel`. Do NOT build a custom Docker image — the base template already has PyTorch with CUDA 12.4, triton, NCCL, and all the CUDA kernels. Building your own Docker is unnecessary and risks version mismatches.
+Use `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`. Do NOT build a custom Docker image — the base template already has PyTorch with CUDA 12.4, triton, NCCL, and all the CUDA kernels. Building your own Docker is unnecessary and risks version mismatches.
 
 Settings on the RunPod pod:
-- **Template**: `runpod/pytorch:2.5.1-py3.11-cuda12.4.1-devel`
+- **Template**: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
 - **Network volume**: Attach to `/workspace` (checkpoints, HF cache, and dataset cache survive spot restarts)
-- **Startup command**: `./runpod_sweep.sh` (or whatever script you need)
+- **Startup command**: First run `./runpod_setup.sh` once, then `./runpod_sweep.sh` (or whatever script you need)
 
 ## Spot Instance Resilience
 
@@ -51,7 +51,21 @@ The base template already has `torch 2.4.1+cu124`. The scripts must NOT try to u
 
 ### How the scripts handle it
 
-In both `runpod_start.sh` and `runpod_sweep.sh`:
+Dependency installation is extracted into `runpod_setup.sh`. Both `runpod_start.sh` and `runpod_sweep.sh` source it, so you run setup once and the training/sweep scripts skip it.
+
+**Run setup once:**
+```bash
+./runpod_setup.sh
+```
+
+Then run training or sweep without re-installing:
+```bash
+./runpod_start.sh       # single training run
+# or
+./runpod_sweep.sh        # full sweep pipeline
+```
+
+**What `runpod_setup.sh` does:**
 
 **Step 1 — Detect torch:**
 ```bash
@@ -73,7 +87,7 @@ This step does NOT use `--ignore-installed` (avoids needlessly reinstalling torc
 
 ### Version constraints
 
-`pyproject.toml` uses `torch>=2.0.0` and `torchvision>=0.15.0` (not `>=2.5.0` / `>=0.26.0`). The template's `torch 2.4.1` satisfies these, so pip never attempts an upgrade.
+`pyproject.toml` uses `torch==2.4.0` and `torchvision>=0.19.0`, pinned to match the template's `torch 2.4.0` so pip never attempts an upgrade.
 
 ## Config Files
 
@@ -146,6 +160,7 @@ RunPod web terminal supports tmux:
 
 ```bash
 tmux new -s sweep          # start session
+./runpod_setup.sh          # install deps once
 ./runpod_sweep.sh          # run the command
 Ctrl+B, then D             # detach (keeps running)
 
@@ -162,6 +177,7 @@ Inside tmux:
 
 | File | Purpose |
 |------|---------|
+| `runpod_setup.sh` | One-time dependency install + env setup (sourced by the scripts below) |
 | `runpod_start.sh` | Single-training entrypoint for RunPod (runs `train_grpo.py`) |
 | `runpod_sweep.sh` | Sweep entrypoint for RunPod (runs `run_prelim.py`) |
 | `configs/grpo_runpod.yaml` | Training config for RunPod (bf16, save_steps=50) |
@@ -178,6 +194,7 @@ Before your first RunPod run:
 - [ ] Pod selected: `runpod/pytorch:2.5.1-py3.11-cuda12.4.1-devel`, 1× RTX 4090 spot
 - [ ] Network volume attached at `/workspace`
 - [ ] Repo cloned into `/workspace` (or uploaded)
+- [ ] Run setup once: `./runpod_setup.sh`
 - [ ] Run smoke sweep first: `SWEEP_CONFIG=configs/pipeline_sweep_smoke.yaml ./runpod_sweep.sh`
 - [ ] Smoke passes → full sweep: `SWEEP_CONFIG=configs/pipeline_sweep.yaml ./runpod_sweep.sh`
 - [ ] Started in tmux: `tmux new -s sweep`

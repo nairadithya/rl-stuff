@@ -516,7 +516,7 @@ def main() -> None:
         log_completions=config.log_completions,
         use_vllm=config.use_vllm,
         seed=config.seed,
-        dataloader_pin_memory=not torch.backends.mps.is_available(),
+        dataloader_pin_memory=not torch.cuda.is_available(),
     )
 
     trainer_kwargs = {
