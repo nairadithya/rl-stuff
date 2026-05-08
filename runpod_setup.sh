@@ -15,17 +15,23 @@ PIP_OPTS="--ignore-installed --root-user-action=ignore"
 
 TORCH_EXTRA_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA}"
 
-if python -c "import torch; assert torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
+if python -c "import torch; torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
     echo "PyTorch already installed with CUDA, skipping torch in requirements"
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
     pip install --upgrade pip $PIP_OPTS
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
-    # Already have CUDA torch — don't pass extra index to avoid pip re-resolving
+    PIP_EXTRAS=""
+elif python -c "import torch; print('torch', torch.__version__, 'installed but CUDA unavailable')" 2>/dev/null; then
+    echo "PyTorch installed but CUDA unavailable (driver mismatch). Forcing cu124 torch..."
+    pip install --upgrade pip $PIP_OPTS
+    grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
+    pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
+    pip install --force-reinstall --no-deps torch torchvision --extra-index-url "$TORCH_EXTRA_INDEX"
     PIP_EXTRAS=""
 else
+    echo "PyTorch not found. Installing with CUDA support..."
     pip install --upgrade pip $PIP_OPTS
     pip install -r requirements.txt $PIP_OPTS --extra-index-url "$TORCH_EXTRA_INDEX"
-    # Need CUDA torch — keep extra index as safety net for pip install -e .
     PIP_EXTRAS="--extra-index-url $TORCH_EXTRA_INDEX"
 fi
 # Install the package itself — no --ignore-installed here to avoid needlessly
