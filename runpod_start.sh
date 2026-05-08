@@ -11,17 +11,19 @@ mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$PERSIST
 
 TORCH_CUDA="${TORCH_CUDA:-cu124}"
 
+PIP_OPTS="--ignore-installed --root-user-action=ignore"
+
 if python -c "import torch; assert torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
     echo "PyTorch already installed with CUDA, skipping torch in requirements"
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
-    pip install --upgrade pip
-    pip install -r /tmp/requirements_notorch.txt
+    pip install --upgrade pip $PIP_OPTS
+    pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
 else
-    pip install --upgrade pip
-    pip install -r requirements.txt \
+    pip install --upgrade pip $PIP_OPTS
+    pip install -r requirements.txt $PIP_OPTS \
       --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 fi
-pip install -e .
+pip install -e . $PIP_OPTS
 
 # NCCL tuning for multi-GPU cloud instances
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
