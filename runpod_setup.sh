@@ -22,11 +22,12 @@ if python -c "import torch; torch.cuda.is_available(); print('torch', torch.__ve
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
     PIP_EXTRAS=""
 elif python -c "import torch; print('torch', torch.__version__, 'installed but CUDA unavailable')" 2>/dev/null; then
-    echo "PyTorch installed but CUDA unavailable (driver mismatch). Forcing cu124 torch..."
+    echo "PyTorch installed but CUDA unavailable (driver mismatch). Replacing with cu124 torch..."
     pip install --upgrade pip $PIP_OPTS
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
-    pip install --force-reinstall --no-deps torch torchvision --extra-index-url "$TORCH_EXTRA_INDEX"
+    pip uninstall -y torch torchvision 2>/dev/null || true
+    pip install torch torchvision --extra-index-url "$TORCH_EXTRA_INDEX"
     PIP_EXTRAS=""
 else
     echo "PyTorch not found. Installing with CUDA support..."
