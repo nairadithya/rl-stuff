@@ -11,7 +11,11 @@ mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$PERSIST
 
 TORCH_CUDA="${TORCH_CUDA:-cu124}"
 
-PIP_OPTS="--ignore-installed --root-user-action=ignore"
+PIP_OPTS="--root-user-action=ignore"
+
+# Pre-install blinker with --ignore-installed to work around RunPod's
+# system distutils blinker 1.4 that pip can't uninstall (required by streamlit).
+pip install --ignore-installed blinker>=1.9.0 $PIP_OPTS 2>/dev/null || true
 
 TORCH_EXTRA_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA}"
 
