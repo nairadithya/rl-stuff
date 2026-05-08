@@ -9,9 +9,17 @@ export TORCH_HOME="${TORCH_HOME:-$PERSISTENT_DIR/torch_cache}"
 
 mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$PERSISTENT_DIR/outputs"
 
-pip install --upgrade pip
-if [ -f requirements.txt ]; then
-  pip install -r requirements.txt
+TORCH_CUDA="${TORCH_CUDA:-cu124}"
+
+if python -c "import torch; assert torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
+    echo "PyTorch already installed with CUDA, skipping torch in requirements"
+    grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
+    pip install --upgrade pip
+    pip install -r /tmp/requirements_notorch.txt
+else
+    pip install --upgrade pip
+    pip install -r requirements.txt \
+      --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 fi
 pip install -e .
 

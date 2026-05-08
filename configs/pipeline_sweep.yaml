@@ -26,7 +26,7 @@ loss_types:
   - dapo
 
 output_root: outputs/sweep
-train_config: configs/grpo_small.yaml
+train_config: configs/grpo_runpod.yaml
 eval_config: configs/eval_prelim.yaml
 eval_backend: transformers
 run_name_prefix: sweep
