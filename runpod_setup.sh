@@ -24,7 +24,6 @@ if python -c "import torch; torch.cuda.is_available(); print('torch', torch.__ve
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
     pip install --upgrade pip $PIP_OPTS
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
-    PIP_EXTRAS=""
 elif python -c "import torch; print('torch', torch.__version__, 'installed but CUDA unavailable')" 2>/dev/null; then
     echo "PyTorch installed but CUDA unavailable (driver mismatch). Replacing with cu124 torch..."
     pip install --upgrade pip $PIP_OPTS
@@ -34,16 +33,15 @@ elif python -c "import torch; print('torch', torch.__version__, 'installed but C
     pip install "torch>=2.0.0,<2.7.0" "torchvision>=0.15.0" \
       --index-url "$TORCH_EXTRA_INDEX" \
       --extra-index-url "https://pypi.org/simple"
-    PIP_EXTRAS=""
 else
     echo "PyTorch not found. Installing with CUDA support..."
     pip install --upgrade pip $PIP_OPTS
     pip install -r requirements.txt $PIP_OPTS --extra-index-url "$TORCH_EXTRA_INDEX"
-    PIP_EXTRAS="--extra-index-url $TORCH_EXTRA_INDEX"
 fi
-# Install the package itself — no --ignore-installed here to avoid needlessly
-# reinstalling already-satisfied deps (especially torch).
-pip install -e . $PIP_EXTRAS
+# Install the package itself — deps already handled by pip install -r above.
+# --no-deps prevents pip from re-resolving torch against PyPI and upgrading
+# from our cu124 build to an incompatible cu130 build.
+pip install -e . --no-deps
 
 # NCCL tuning for multi-GPU cloud instances
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
