@@ -23,7 +23,10 @@ else
     pip install -r requirements.txt $PIP_OPTS \
       --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 fi
-pip install -e . $PIP_OPTS
+# Install the package itself — no --ignore-installed here to avoid needlessly
+# reinstalling already-satisfied deps (especially torch). Extra index ensures
+# CUDA builds are found if pip does need to pull torch.
+pip install -e . --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
 
 # NCCL tuning for multi-GPU cloud instances
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"

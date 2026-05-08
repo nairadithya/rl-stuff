@@ -289,31 +289,14 @@ uv run python compare_runs.py \
 - Training now exposes rollout quality knobs (`temperature`, `top_p`, `repetition_penalty`) and `mask_truncated_completions`.
 - Preliminary pipeline defaults to `eval_backend: transformers`.
 
-## RunPod setup
+## RunPod deployment
 
-This repo is RunPod-ready with a CUDA base image and pip install.
+See **[RUNPOD.md](RUNPOD.md)** for the complete guide covering:
 
-### Option A: Use the Dockerfile
-
-Build and run locally (or on a compatible registry):
-
-```bash
-docker build -t grpo-small-lm:latest .
-docker run --gpus all -it --rm grpo-small-lm:latest
-```
-
-### Option B: Use a RunPod startup command
-
-On a RunPod pod (or any CUDA VM), run:
-
-```bash
-./runpod_start.sh
-```
-
-### MLX (Apple Silicon only)
-
-MLX dependencies are optional. On Apple Silicon machines:
-
-```bash
-pip install -e ".[mlx]"
-```
+- Hardware recommendations (spot GPU selection)
+- Base template setup (no custom Docker needed)
+- Spot instance resilience (SIGTERM handling, auto-resume, checkpointing)
+- Dependency install pitfalls (blinker + torch version mismatch fixes)
+- Smoke vs full sweep pipeline
+- Tmux workflow
+- File reference and checklist

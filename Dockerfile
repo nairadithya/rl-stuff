@@ -13,14 +13,16 @@ RUN apt-get update \
     python3 python3-pip python3-venv git curl \
   && rm -rf /var/lib/apt/lists/*
 
+ENV PIP_ROOT_USER_ACTION=ignore
+
 RUN python3 -m pip install --upgrade pip
 
 COPY requirements.txt ./requirements.txt
-RUN pip install --extra-index-url https://download.pytorch.org/whl/cu121 \
+RUN pip install --ignore-installed --extra-index-url https://download.pytorch.org/whl/cu121 \
     -r requirements.txt
 
 COPY . .
-RUN pip install -e .
+RUN pip install -e . --ignore-installed
 
 ENV HF_HOME=/workspace/hf_cache
 ENV HF_HUB_CACHE=/workspace/hf_cache/hub
