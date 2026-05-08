@@ -13,20 +13,24 @@ TORCH_CUDA="${TORCH_CUDA:-cu124}"
 
 PIP_OPTS="--ignore-installed --root-user-action=ignore"
 
+TORCH_EXTRA_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA}"
+
 if python -c "import torch; assert torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
     echo "PyTorch already installed with CUDA, skipping torch in requirements"
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
     pip install --upgrade pip $PIP_OPTS
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
+    # Already have CUDA torch — don't pass extra index to avoid pip re-resolving
+    PIP_EXTRAS=""
 else
     pip install --upgrade pip $PIP_OPTS
-    pip install -r requirements.txt $PIP_OPTS \
-      --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
+    pip install -r requirements.txt $PIP_OPTS --extra-index-url "$TORCH_EXTRA_INDEX"
+    # Need CUDA torch — keep extra index as safety net for pip install -e .
+    PIP_EXTRAS="--extra-index-url $TORCH_EXTRA_INDEX"
 fi
 # Install the package itself — no --ignore-installed here to avoid needlessly
-# reinstalling already-satisfied deps (especially torch). Extra index ensures
-# CUDA builds are found if pip does need to pull torch.
-pip install -e . --extra-index-url "https://download.pytorch.org/whl/${TORCH_CUDA}"
+# reinstalling already-satisfied deps (especially torch).
+pip install -e . $PIP_EXTRAS
 
 # NCCL tuning for multi-GPU cloud instances
 export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
