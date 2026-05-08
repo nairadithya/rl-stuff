@@ -527,6 +527,12 @@ def _train_model(
             str(gradient_accumulation_steps),
         ]
     )
+    if loss_type is not None:
+        command.extend(["--loss-type", loss_type])
+    if beta is not None:
+        command.extend(["--beta", str(beta)])
+    if num_train_epochs is not None:
+        command.extend(["--num-train-epochs", str(num_train_epochs)])
     if train_max_samples is not None:
         command.extend(["--max-samples", str(train_max_samples)])
     if mask_truncated_completions:
@@ -535,6 +541,69 @@ def _train_model(
         command.append("--no-mask-truncated-completions")
 
     _run(command, cwd=repo_root)
+
+
+def _run_compare(config, repo_root, model_dir, model, model_slug,
+                 baseline_metrics_path, tuned_model_path, tuned_metrics_path,
+                 lt_slug="default"):
+    compare_dir = model_dir / "comparison" / lt_slug
+    label = f"{model_slug}-{lt_slug}"
+    _run(
+        [
+            config.python_bin,
+            "compare_runs.py",
+            "--output-dir",
+            str(compare_dir),
+            "--model",
+            f"base:{model}:{baseline_metrics_path}",
+            "--model",
+            f"{label}:{tuned_model_path}:{tuned_metrics_path}",
+        ],
+        cwd=repo_root,
+    )
+
+
+def _add_leaderboard_row(rows, model, model_slug, loss_type,
+                         baseline_metrics, tuned_metrics, tuned_model_path,
+                         baseline_metrics_path, tuned_metrics_path):
+    baseline_accuracy = baseline_metrics.get("accuracy_mean")
+    tuned_accuracy = tuned_metrics.get("accuracy_mean")
+    accuracy_delta = (
+        float(tuned_accuracy) - float(baseline_accuracy)
+        if baseline_accuracy is not None and tuned_accuracy is not None
+        else None
+    )
+    row = {
+        "model": model,
+        "baseline_accuracy": baseline_accuracy,
+        "tuned_accuracy": tuned_accuracy,
+        "accuracy_delta": accuracy_delta,
+        "baseline_metrics_path": str(baseline_metrics_path),
+        "tuned_metrics_path": str(tuned_metrics_path),
+        "tuned_model_path": tuned_model_path,
+    }
+    if loss_type is not None:
+        row["loss_type"] = loss_type
+    rows.append(row)
+
+
+def _record_run(manifest_path, model, model_slug, loss_type,
+                baseline_metrics_path, tuned_metrics_path,
+                tuned_model_path, model_dir):
+    lt_slug = loss_type or "default"
+    run_record = {
+        "model": model,
+        "model_slug": model_slug,
+        "loss_type": loss_type,
+        "baseline_metrics": str(baseline_metrics_path),
+        "tuned_metrics": str(tuned_metrics_path),
+        "train_dir": str(model_dir / "train" / lt_slug),
+        "tuned_model_path": tuned_model_path,
+        "comparison_dir": str(model_dir / "comparison" / lt_slug),
+    }
+    manifest = _read_json(manifest_path)
+    manifest["runs"].append(run_record)
+    _write_json(manifest_path, manifest)
 
 
 def run_pipeline(config: PrelimConfig) -> None:
@@ -557,15 +626,15 @@ def run_pipeline(config: PrelimConfig) -> None:
 
     leaderboard_rows: list[dict[str, Any]] = []
 
+    loss_types = config.loss_types if config.loss_types else [None]
+
     for idx, model in enumerate(config.models):
         model_slug = _sanitize_name(model)
         model_dir = experiment_dir / model_slug
         baseline_eval_dir = model_dir / "baseline_eval"
-        train_dir = model_dir / "train"
-        tuned_eval_dir = model_dir / "tuned_eval"
         model_dir.mkdir(parents=True, exist_ok=True)
 
-        print(f"\n=== Running preliminary pipeline for {model} ===")
+        print(f"\n=== Pipeline for {model} ===")
 
         baseline_metrics_path = _eval_model(
             python_bin=config.python_bin,
@@ -582,8 +651,55 @@ def run_pipeline(config: PrelimConfig) -> None:
             backend=config.eval_backend,
             fallback_to_transformers=config.eval_fallback_to_transformers,
         )
+        baseline_metrics = _read_json(baseline_metrics_path)
 
-        if not config.skip_training:
+        if config.skip_training:
+            tuned_model_path = str(config.tuned_model_paths[idx])
+            tuned_eval_dir = model_dir / "tuned_eval"
+            tuned_metrics_path = _eval_model(
+                python_bin=config.python_bin,
+                repo_root=repo_root,
+                model_name_or_path=tuned_model_path,
+                dataset_name=config.dataset_name,
+                split=config.test_split,
+                max_samples=config.test_max_samples,
+                output_dir=tuned_eval_dir,
+                seed=config.seed,
+                eval_config=config.eval_config,
+                max_new_tokens=config.eval_max_new_tokens,
+                repetition_penalty=config.repetition_penalty,
+                backend=config.eval_backend,
+                fallback_to_transformers=config.eval_fallback_to_transformers,
+            )
+            tuned_metrics = _read_json(tuned_metrics_path)
+            _run_compare(
+                config, repo_root, model_dir, model, model_slug,
+                baseline_metrics_path, tuned_model_path, tuned_metrics_path,
+            )
+            _add_leaderboard_row(
+                leaderboard_rows, model, model_slug, None,
+                baseline_metrics, tuned_metrics, tuned_model_path,
+                baseline_metrics_path, tuned_metrics_path,
+            )
+            _record_run(manifest_path, model, model_slug, None,
+                        baseline_metrics_path, tuned_metrics_path,
+                        tuned_model_path, model_dir)
+            continue
+
+        for lt in loss_types:
+            lt_label = lt if lt else "default"
+            lt_slug = lt or "default"
+            print(f"\n--- {model_slug}  |  loss_type={lt_label} ---")
+
+            train_dir = model_dir / "train" / lt_slug
+            tuned_eval_dir = model_dir / "tuned_eval" / lt_slug
+            train_dir.mkdir(parents=True, exist_ok=True)
+            tuned_eval_dir.mkdir(parents=True, exist_ok=True)
+
+            run_name = f"{config.run_name_prefix}-{model_slug}"
+            if lt:
+                run_name += f"-{lt}"
+
             _train_model(
                 python_bin=config.python_bin,
                 repo_root=repo_root,
@@ -592,7 +708,7 @@ def run_pipeline(config: PrelimConfig) -> None:
                 train_split=config.train_split,
                 train_max_samples=config.train_max_samples,
                 output_dir=train_dir,
-                run_name=f"{config.run_name_prefix}-{model_slug}",
+                run_name=run_name,
                 seed=config.seed,
                 max_steps=config.max_steps,
                 learning_rate=config.learning_rate,
@@ -608,76 +724,49 @@ def run_pipeline(config: PrelimConfig) -> None:
                 train_config=config.train_config,
                 use_accelerate=config.use_accelerate,
                 accelerate_config=config.accelerate_config,
+                loss_type=lt,
+                beta=config.beta,
+                num_train_epochs=config.num_train_epochs,
             )
             tuned_model_path = str(train_dir)
-        else:
-            tuned_model_path = str(config.tuned_model_paths[idx])
 
-        tuned_metrics_path = _eval_model(
-            python_bin=config.python_bin,
-            repo_root=repo_root,
-            model_name_or_path=tuned_model_path,
-            dataset_name=config.dataset_name,
-            split=config.test_split,
-            max_samples=config.test_max_samples,
-            output_dir=tuned_eval_dir,
-            seed=config.seed,
-            eval_config=config.eval_config,
-            max_new_tokens=config.eval_max_new_tokens,
-            repetition_penalty=config.repetition_penalty,
-            backend=config.eval_backend,
-            fallback_to_transformers=config.eval_fallback_to_transformers,
-        )
+            tuned_metrics_path = _eval_model(
+                python_bin=config.python_bin,
+                repo_root=repo_root,
+                model_name_or_path=tuned_model_path,
+                dataset_name=config.dataset_name,
+                split=config.test_split,
+                max_samples=config.test_max_samples,
+                output_dir=tuned_eval_dir,
+                seed=config.seed,
+                eval_config=config.eval_config,
+                max_new_tokens=config.eval_max_new_tokens,
+                repetition_penalty=config.repetition_penalty,
+                backend=config.eval_backend,
+                fallback_to_transformers=config.eval_fallback_to_transformers,
+            )
+            tuned_metrics = _read_json(tuned_metrics_path)
 
-        per_model_compare_dir = model_dir / "comparison"
-        _run(
-            [
-                config.python_bin,
-                "compare_runs.py",
-                "--output-dir",
-                str(per_model_compare_dir),
-                "--model",
-                f"base:{model}:{baseline_metrics_path}",
-                "--model",
-                f"{model_slug}-grpo:{tuned_model_path}:{tuned_metrics_path}",
-            ],
-            cwd=repo_root,
-        )
+            per_model_compare_dir = model_dir / "comparison" / lt_slug
+            _run_compare(
+                config, repo_root, model_dir, model, model_slug,
+                baseline_metrics_path, tuned_model_path, tuned_metrics_path,
+                lt_slug,
+            )
 
-        baseline_metrics = _read_json(baseline_metrics_path)
-        tuned_metrics = _read_json(tuned_metrics_path)
-        baseline_accuracy = baseline_metrics.get("accuracy_mean")
-        tuned_accuracy = tuned_metrics.get("accuracy_mean")
-        accuracy_delta = (
-            float(tuned_accuracy) - float(baseline_accuracy)
-            if baseline_accuracy is not None and tuned_accuracy is not None
-            else None
-        )
+            _add_leaderboard_row(
+                leaderboard_rows, model, model_slug, lt,
+                baseline_metrics, tuned_metrics, tuned_model_path,
+                baseline_metrics_path, tuned_metrics_path,
+            )
+            _record_run(manifest_path, model, model_slug, lt,
+                        baseline_metrics_path, tuned_metrics_path,
+                        tuned_model_path, model_dir)
 
-        leaderboard_rows.append(
-            {
-                "model": model,
-                "baseline_accuracy": baseline_accuracy,
-                "tuned_accuracy": tuned_accuracy,
-                "accuracy_delta": accuracy_delta,
-                "baseline_metrics_path": str(baseline_metrics_path),
-                "tuned_metrics_path": str(tuned_metrics_path),
-                "tuned_model_path": tuned_model_path,
-            }
-        )
-
-        run_record = {
-            "model": model,
-            "model_slug": model_slug,
-            "baseline_metrics": str(baseline_metrics_path),
-            "tuned_metrics": str(tuned_metrics_path),
-            "train_dir": str(train_dir),
-            "tuned_model_path": tuned_model_path,
-            "comparison_dir": str(per_model_compare_dir),
-        }
-        manifest = _read_json(manifest_path)
-        manifest["runs"].append(run_record)
-        _write_json(manifest_path, manifest)
+    fieldnames = ["model", "baseline_accuracy", "tuned_accuracy", "accuracy_delta"]
+    if len(loss_types) > 1 or (len(loss_types) == 1 and loss_types[0] is not None):
+        fieldnames.insert(1, "loss_type")
+    fieldnames += ["baseline_metrics_path", "tuned_metrics_path", "tuned_model_path"]
 
     leaderboard_path = experiment_dir / "leaderboard.json"
     _write_json(
@@ -691,21 +780,13 @@ def run_pipeline(config: PrelimConfig) -> None:
 
     leaderboard_csv_path = experiment_dir / "leaderboard.csv"
     with leaderboard_csv_path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(
-            handle,
-            fieldnames=[
-                "model",
-                "baseline_accuracy",
-                "tuned_accuracy",
-                "accuracy_delta",
-                "baseline_metrics_path",
-                "tuned_metrics_path",
-                "tuned_model_path",
-            ],
-        )
+        writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(leaderboard_rows)
 
+    has_loss_col = "loss_type" in fieldnames
+    loss_col = "| Loss type " if has_loss_col else ""
+    loss_align = "|---" if has_loss_col else ""
     summary_lines = [
         "# Preliminary GRPO Pipeline Output",
         "",
@@ -713,8 +794,8 @@ def run_pipeline(config: PrelimConfig) -> None:
         "",
         "## Models",
         "",
-        "| Model | Baseline acc | Tuned acc | Delta |",
-        "|---|---:|---:|---:|",
+        f"| Model {loss_col}| Baseline acc | Tuned acc | Delta |",
+        f"|----{loss_align}|---|---:|---:|",
     ]
     for row in leaderboard_rows:
         baseline = row["baseline_accuracy"]
@@ -723,9 +804,15 @@ def run_pipeline(config: PrelimConfig) -> None:
         baseline_text = "n/a" if baseline is None else f"{float(baseline):.6f}"
         tuned_text = "n/a" if tuned is None else f"{float(tuned):.6f}"
         delta_text = "n/a" if delta is None else f"{float(delta):+.6f}"
-        summary_lines.append(
-            f"| {row['model']} | {baseline_text} | {tuned_text} | {delta_text} |"
-        )
+        if has_loss_col:
+            lt = row.get("loss_type", "n/a")
+            summary_lines.append(
+                f"| {row['model']} | {lt} | {baseline_text} | {tuned_text} | {delta_text} |"
+            )
+        else:
+            summary_lines.append(
+                f"| {row['model']} | {baseline_text} | {tuned_text} | {delta_text} |"
+            )
 
     summary_lines.extend(
         [
@@ -736,7 +823,7 @@ def run_pipeline(config: PrelimConfig) -> None:
             f"- Leaderboard: `{leaderboard_path}`",
             f"- Leaderboard CSV: `{leaderboard_csv_path}`",
             f"- Per-model outputs: `{experiment_dir}`",
-            "- Each model directory includes `baseline_eval/`, `train/`, `tuned_eval/`, and `comparison/`",
+            "- Each model directory includes `baseline_eval/`, `train/<loss_type>/`, `tuned_eval/<loss_type>/`, and `comparison/<loss_type>/`",
         ]
     )
 
