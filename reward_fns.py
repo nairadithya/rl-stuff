@@ -105,5 +105,11 @@ def format_reward(completions, **kwargs):
     return rewards
 
 
-def length_reward(completion_ids, **kwargs):
-    return [float(len(ids)) for ids in completion_ids]
+def length_reward(completions, **kwargs):
+    rewards = []
+    for completion in completions:
+        if isinstance(completion, str):
+            rewards.append(float(len(completion)))
+        else:
+            rewards.append(float(len(completion)))
+    return rewards
