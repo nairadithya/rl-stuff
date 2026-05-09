@@ -426,7 +426,6 @@ def main() -> None:
         num_generations=config.num_generations,
         max_completion_length=config.max_completion_length,
         temperature=config.temperature,
-        top_p=config.top_p,
         repetition_penalty=config.repetition_penalty,
         beta=config.beta,
         scale_rewards=config.scale_rewards,
