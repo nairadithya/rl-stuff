@@ -6,6 +6,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -49,6 +50,7 @@ class PrelimConfig:
     accelerate_config: str | None = None
     eval_backend: str = "transformers"
     parallel: bool = False
+    max_concurrent: int | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -230,6 +232,12 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Train models sequentially (default).",
     )
+    parser.add_argument(
+        "--max-concurrent",
+        type=int,
+        default=None,
+        help="Max models to train simultaneously (default: all if --parallel).",
+    )
     return parser.parse_args()
 
 
@@ -285,6 +293,7 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
         "python_bin": args.python_bin,
         "accelerate_config": args.accelerate_config,
         "eval_backend": args.eval_backend,
+        "max_concurrent": args.max_concurrent,
     }
 
     for key, value in overrides.items():
@@ -621,22 +630,45 @@ def run_pipeline(config: PrelimConfig) -> None:
     loss_types = config.loss_types if config.loss_types else [None]
 
     if config.parallel and len(config.models) > 1:
-        procs: list[subprocess.Popen] = []
-        for model in config.models:
-            child_cmd = [sys.executable, __file__]
-            if args.config is not None:
-                child_cmd += ["--config", args.config]
-            child_cmd += ["--models", model, "--no-parallel"]
-            if config.skip_training:
-                child_cmd.append("--skip-training")
-            print(f"  Spawning: {' '.join(child_cmd)}")
-            procs.append(subprocess.Popen(child_cmd))
-        retcodes = [p.wait() for p in procs]
-        failures = [(m, r) for m, r in zip(config.models, retcodes) if r != 0]
+        max_workers = config.max_concurrent if config.max_concurrent is not None else len(config.models)
+        model_queue = list(config.models)
+        active: list[tuple[str, subprocess.Popen]] = []
+        failures: list[tuple[str, int]] = []
+
+        print(f"Parallel mode: {len(model_queue)} models, max {max_workers} concurrent")
+
+        while model_queue or active:
+            while model_queue and len(active) < max_workers:
+                model = model_queue.pop(0)
+                child_cmd = [sys.executable, __file__]
+                if args.config is not None:
+                    child_cmd += ["--config", args.config]
+                child_cmd += ["--models", model, "--no-parallel"]
+                if config.skip_training:
+                    child_cmd.append("--skip-training")
+                print(f"  Starting: {model}")
+                proc = subprocess.Popen(child_cmd)
+                active.append((model, proc))
+
+            still_active: list[tuple[str, subprocess.Popen]] = []
+            for model, proc in active:
+                ret = proc.poll()
+                if ret is None:
+                    still_active.append((model, proc))
+                elif ret != 0:
+                    failures.append((model, ret))
+                    print(f"  Finished: {model} (exit {ret})")
+                else:
+                    print(f"  Finished: {model}")
+            active = still_active
+
+            if active:
+                time.sleep(5)
+
         if failures:
             msg = "; ".join(f"{m} exit {r}" for m, r in failures)
-            raise RuntimeError(f"Parallel pipeline failed: {msg}")
-        print("\nAll parallel pipelines completed. Results written to disk.", flush=True)
+            raise RuntimeError(f"Parallel pipeline failures: {msg}")
+        print("\nAll parallel pipelines completed.", flush=True)
         return
 
     for idx, model in enumerate(config.models):
