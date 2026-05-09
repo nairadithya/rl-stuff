@@ -38,6 +38,7 @@ class TrainingConfig:
     log_completions: bool = True
     resume_from_checkpoint: str | None = None
     auto_resume: bool = False
+    hf_token: str | None = None
     use_peft: bool = True
     lora_r: int = 16
     lora_alpha: int = 32

@@ -37,6 +37,7 @@ class EvalConfig:
     show_progress_bar: bool = True
     seed: int = 42
     output_dir: str = "outputs/eval-prelim"
+    hf_token: str | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -95,6 +96,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir", default=None, help="Directory for metrics and predictions."
     )
+    parser.add_argument(
+        "--hf-token",
+        default=None,
+        help="HuggingFace token for gated models (e.g. Gemma, Llama).",
+    )
     return parser.parse_args()
 
 
@@ -137,6 +143,7 @@ def merge_config(defaults: EvalConfig, args: argparse.Namespace) -> EvalConfig:
         "log_every": args.log_every,
         "seed": args.seed,
         "output_dir": args.output_dir,
+        "hf_token": args.hf_token,
     }
 
     for key, value in overrides.items():
@@ -210,10 +217,12 @@ def _format_prompt(prompt: Any, tokenizer: AutoTokenizer) -> str:
     return str(prompt)
 
 
-def _load_model(model_name_or_path: str, device: str, dtype: torch.dtype):
+def _load_model(model_name_or_path: str, device: str, dtype: torch.dtype, token: str | None = None):
     load_kwargs: dict[str, Any] = {"dtype": dtype}
     if device == "cuda":
         load_kwargs["device_map"] = "auto"
+    if token is not None:
+        load_kwargs["token"] = token
 
     try:
         model = AutoPeftModelForCausalLM.from_pretrained(
@@ -277,14 +286,18 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
         model_name_or_path=config.model_name_or_path,
         explicit=config.tokenizer_name_or_path,
     )
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, use_fast=True)
+    tokenizer = AutoTokenizer.from_pretrained(
+        tokenizer_source, use_fast=True, token=config.hf_token
+    )
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:
             raise ValueError("Tokenizer must define eos_token_id or pad_token_id.")
         tokenizer.pad_token = tokenizer.eos_token
 
-    model = _load_model(config.model_name_or_path, device=device, dtype=dtype)
+    model = _load_model(
+        config.model_name_or_path, device=device, dtype=dtype, token=config.hf_token
+    )
 
     print(
         "Starting evaluation "

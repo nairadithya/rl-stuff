@@ -178,6 +178,11 @@ def parse_args() -> argparse.Namespace:
         help="Path to checkpoint to resume from.",
     )
     parser.add_argument(
+        "--hf-token",
+        default=None,
+        help="HuggingFace token for gated models (e.g. Gemma, Llama).",
+    )
+    parser.add_argument(
         "--auto-resume",
         action="store_true",
         help="Auto-resume from latest checkpoint in output_dir.",
@@ -263,6 +268,7 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         "lora_alpha": args.lora_alpha,
         "lora_dropout": args.lora_dropout,
         "resume_from_checkpoint": args.resume_from_checkpoint,
+        "hf_token": args.hf_token,
     }
 
     for key, value in overrides.items():
@@ -442,6 +448,9 @@ def main() -> None:
         use_vllm=config.use_vllm,
         seed=config.seed,
     )
+
+    if config.hf_token is not None:
+        grpo_args.model_init_kwargs = {"token": config.hf_token}
 
     trainer_kwargs = {
         "model": config.model_name,
