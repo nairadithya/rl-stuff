@@ -16,7 +16,7 @@ PIP_OPTS="--root-user-action=ignore"
 
 # Pre-install blinker with --ignore-installed to work around RunPod's
 # system distutils blinker 1.4 that pip can't uninstall (required by streamlit).
-pip install --ignore-installed blinker>=1.9.0 $PIP_OPTS 2>/dev/null || true
+pip install --ignore-installed "blinker>=1.9.0" $PIP_OPTS 2>/dev/null || true
 
 TORCH_EXTRA_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA}"
 
