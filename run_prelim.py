@@ -48,6 +48,7 @@ class PrelimConfig:
     use_accelerate: bool = True
     accelerate_config: str | None = None
     eval_backend: str = "transformers"
+    parallel: bool = False
 
 
 def parse_args() -> argparse.Namespace:
@@ -221,6 +222,14 @@ def parse_args() -> argparse.Namespace:
         action="store_true",
         help="Launch training directly with python.",
     )
+    parser.add_argument(
+        "--parallel", action="store_true", help="Train multiple models simultaneously."
+    )
+    parser.add_argument(
+        "--no-parallel",
+        action="store_true",
+        help="Train models sequentially (default).",
+    )
     return parser.parse_args()
 
 
@@ -303,6 +312,11 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
         data["mask_truncated_completions"] = True
     if args.no_mask_truncated_completions:
         data["mask_truncated_completions"] = False
+
+    if args.parallel:
+        data["parallel"] = True
+    if args.no_parallel:
+        data["parallel"] = False
 
     models = data["models"]
     if isinstance(models, str):
@@ -605,6 +619,25 @@ def run_pipeline(config: PrelimConfig) -> None:
     leaderboard_rows: list[dict[str, Any]] = []
 
     loss_types = config.loss_types if config.loss_types else [None]
+
+    if config.parallel and len(config.models) > 1:
+        procs: list[subprocess.Popen] = []
+        for model in config.models:
+            child_cmd = [sys.executable, __file__]
+            if args.config is not None:
+                child_cmd += ["--config", args.config]
+            child_cmd += ["--models", model, "--no-parallel"]
+            if config.skip_training:
+                child_cmd.append("--skip-training")
+            print(f"  Spawning: {' '.join(child_cmd)}")
+            procs.append(subprocess.Popen(child_cmd))
+        retcodes = [p.wait() for p in procs]
+        failures = [(m, r) for m, r in zip(config.models, retcodes) if r != 0]
+        if failures:
+            msg = "; ".join(f"{m} exit {r}" for m, r in failures)
+            raise RuntimeError(f"Parallel pipeline failed: {msg}")
+        print("\nAll parallel pipelines completed. Results written to disk.", flush=True)
+        return
 
     for idx, model in enumerate(config.models):
         model_slug = _sanitize_name(model)
