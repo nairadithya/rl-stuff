@@ -10,7 +10,7 @@ from pathlib import Path
 
 from datasets import load_dataset
 from peft import LoraConfig
-from transformers import TrainerCallback
+from transformers import AutoTokenizer, TrainerCallback
 from trl import GRPOConfig, GRPOTrainer
 import torch
 import yaml
@@ -452,11 +452,18 @@ def main() -> None:
     if config.hf_token is not None:
         grpo_args.model_init_kwargs = {"token": config.hf_token}
 
+    tokenizer = AutoTokenizer.from_pretrained(
+        config.model_name, token=config.hf_token
+    )
+    if tokenizer.pad_token_id is None and tokenizer.eos_token_id is not None:
+        tokenizer.pad_token = tokenizer.eos_token
+
     trainer_kwargs = {
         "model": config.model_name,
         "args": grpo_args,
         "reward_funcs": reward_func,
         "train_dataset": dataset,
+        "processing_class": tokenizer,
     }
 
     if config.use_peft:

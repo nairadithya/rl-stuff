@@ -286,9 +286,10 @@ def evaluate(config: EvalConfig) -> dict[str, Any]:
         model_name_or_path=config.model_name_or_path,
         explicit=config.tokenizer_name_or_path,
     )
-    tokenizer = AutoTokenizer.from_pretrained(
-        tokenizer_source, use_fast=True, token=config.hf_token
-    )
+    tokenizer_kwargs = {"use_fast": True}
+    if config.hf_token is not None:
+        tokenizer_kwargs["token"] = config.hf_token
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_source, **tokenizer_kwargs)
     tokenizer.padding_side = "left"
     if tokenizer.pad_token_id is None:
         if tokenizer.eos_token_id is None:
