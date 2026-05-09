@@ -186,6 +186,6 @@ Before your first RunPod run:
 - [ ] Network volume attached at `/workspace`
 - [ ] Repo cloned into `/workspace` (or uploaded)
 - [ ] Run setup once: `./runpod_setup.sh`
-- [ ] Run smoke sweep first: `SWEEP_CONFIG=configs/pipeline_sweep_smoke.yaml ./runpod_sweep.sh`
+- [ ] Run smoke sweep first: `SWEEP_CONFIG=configs/pipeline_sweep_smoke.yaml ./runpod_sweep.sh
 - [ ] Smoke passes → full sweep: `SWEEP_CONFIG=configs/pipeline_sweep.yaml ./runpod_sweep.sh`
 - [ ] Started in tmux: `tmux new -s sweep`
