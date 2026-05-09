@@ -33,7 +33,7 @@ elif python -c "import torch; print('torch', torch.__version__, 'installed but C
     echo "PyTorch installed but CUDA unavailable (driver mismatch). Replacing with ${TORCH_CUDA} torch..."
     pip install --upgrade pip $PIP_OPTS
     pip install -e ".[dev]" --no-deps $PIP_OPTS
-    pip uninstall -y torch torchaudio 2>/dev/null || true
+    pip uninstall -y torch 2>/dev/null || true
     pip install "torch${TORCH_VERSION_SPEC}" \
       --index-url "$TORCH_EXTRA_INDEX" \
       --extra-index-url "https://pypi.org/simple" \
