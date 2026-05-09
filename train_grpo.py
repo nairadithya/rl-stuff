@@ -8,38 +8,6 @@ import sys
 from dataclasses import asdict
 from pathlib import Path
 
-
-def _configure_mps_env() -> None:
-    if sys.platform != "darwin":
-        return
-
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-    os.environ.setdefault("OMP_NUM_THREADS", "8")
-    os.environ.setdefault("TOKENIZERS_PARALLELISM", "true")
-
-    try:
-        high = float(os.environ.get("PYTORCH_MPS_HIGH_WATERMARK_RATIO", "0.8"))
-    except ValueError:
-        high = 0.8
-
-    if not (0.0 < high <= 1.0):
-        high = 0.8
-
-    low_default = max(0.1, min(0.6, high - 0.1))
-    try:
-        low = float(os.environ.get("PYTORCH_MPS_LOW_WATERMARK_RATIO", str(low_default)))
-    except ValueError:
-        low = low_default
-
-    if not (0.0 < low < high):
-        low = low_default
-
-    os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = f"{high:.2f}"
-    os.environ["PYTORCH_MPS_LOW_WATERMARK_RATIO"] = f"{low:.2f}"
-
-
-_configure_mps_env()
-
 from datasets import load_dataset
 from peft import LoraConfig
 from transformers import TrainerCallback
@@ -394,45 +362,6 @@ def build_peft_config(config: TrainingConfig) -> LoraConfig:
     )
 
 
-def setup_apple_silicon_optimizations() -> None:
-    """Configure optimal settings for Apple Silicon (M1/M2/M3/M4)."""
-    if not torch.backends.mps.is_available():
-        return
-
-    # Enable Metal Performance Shaders
-    print("🍎 Apple Silicon detected - enabling MPS optimizations")
-
-    # Set PyTorch to use all available CPU cores for dataloading
-    # M4 has 4 performance + 4 efficiency cores
-    if "OMP_NUM_THREADS" not in os.environ:
-        os.environ["OMP_NUM_THREADS"] = "8"
-
-    # Enable Metal optimizations
-    os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
-
-    # Set optimal memory allocator for macOS (must be between 0.0 and 1.0)
-    # Use conservative 50% for 16GB to avoid OOM and invalid ratio errors
-    if "PYTORCH_MPS_HIGH_WATERMARK_RATIO" not in os.environ:
-        os.environ["PYTORCH_MPS_HIGH_WATERMARK_RATIO"] = "0.5"
-
-    # Disable the problematic caching allocator warmup that causes the error
-    os.environ["PYTORCH_MPS_ALLOCATOR_POLICY"] = "garbage_collection"
-
-    # Enable Accelerate framework optimizations
-    if "TOKENIZERS_PARALLELISM" not in os.environ:
-        os.environ["TOKENIZERS_PARALLELISM"] = "true"
-
-    print(f"  • MPS device available: {torch.backends.mps.is_available()}")
-    print(f"  • MPS built: {torch.backends.mps.is_built()}")
-    print(f"  • CPU threads: {os.environ.get('OMP_NUM_THREADS', 'default')}")
-    print(
-        f"  • Memory watermark: {os.environ.get('PYTORCH_MPS_HIGH_WATERMARK_RATIO', 'default')}"
-    )
-    print(
-        f"  • Allocator policy: {os.environ.get('PYTORCH_MPS_ALLOCATOR_POLICY', 'default')}"
-    )
-
-
 def sanitize_tokenizer_special_tokens(trainer: GRPOTrainer) -> None:
     tokenizer = getattr(trainer, "processing_class", None)
     model_config = getattr(getattr(trainer, "model", None), "config", None)
@@ -476,9 +405,6 @@ class SpotInterruptCallback(TrainerCallback):
 
 
 def main() -> None:
-    # Setup Apple Silicon optimizations before initializing models
-    setup_apple_silicon_optimizations()
-
     args = parse_args()
     config = merge_config(TrainingConfig(), args)
 

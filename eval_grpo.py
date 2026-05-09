@@ -165,8 +165,6 @@ def merge_config(defaults: EvalConfig, args: argparse.Namespace) -> EvalConfig:
 def resolve_device() -> str:
     if torch.cuda.is_available():
         return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
     return "cpu"
 
 
@@ -174,8 +172,6 @@ def resolve_dtype(device: str) -> torch.dtype:
     if device == "cuda":
         if torch.cuda.is_bf16_supported():
             return torch.bfloat16
-        return torch.float16
-    if device == "mps":
         return torch.float16
     return torch.float32
 
@@ -226,7 +222,7 @@ def _load_model(model_name_or_path: str, device: str, dtype: torch.dtype):
     except Exception:
         model = AutoModelForCausalLM.from_pretrained(model_name_or_path, **load_kwargs)
 
-    if device in {"cpu", "mps"}:
+    if device == "cpu":
         model = model.to(device)
 
     model.eval()
@@ -254,9 +250,6 @@ def _resolve_tokenizer_source(model_name_or_path: str, explicit: str | None) -> 
 
 def evaluate(config: EvalConfig) -> dict[str, Any]:
     set_seed(config.seed)
-
-    if torch.backends.mps.is_available():
-        os.environ.setdefault("PYTORCH_ENABLE_MPS_FALLBACK", "1")
 
     output_dir = Path(config.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)

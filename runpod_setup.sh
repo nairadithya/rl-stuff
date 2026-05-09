@@ -29,8 +29,8 @@ elif python -c "import torch; print('torch', torch.__version__, 'installed but C
     pip install --upgrade pip $PIP_OPTS
     grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
     pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
-    pip uninstall -y torch torchvision torchaudio 2>/dev/null || true
-    pip install "torch>=2.0.0,<2.7.0" "torchvision>=0.15.0" \
+    pip uninstall -y torch torchaudio 2>/dev/null || true
+    pip install "torch>=2.0.0,<2.8.0" \
       --index-url "$TORCH_EXTRA_INDEX" \
       --extra-index-url "https://pypi.org/simple"
 else

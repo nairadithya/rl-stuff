@@ -47,8 +47,7 @@ class PrelimConfig:
     python_bin: str | None = None
     use_accelerate: bool = True
     accelerate_config: str | None = None
-    eval_backend: str = "auto"
-    eval_fallback_to_transformers: bool = True
+    eval_backend: str = "transformers"
 
 
 def parse_args() -> argparse.Namespace:
@@ -188,18 +187,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--eval-backend",
         default=None,
-        choices=["auto", "transformers", "mlx"],
+        choices=["transformers"],
         help="Evaluation backend.",
-    )
-    parser.add_argument(
-        "--eval-fallback-to-transformers",
-        action="store_true",
-        help="Allow eval backend to fall back to transformers when MLX is unavailable.",
-    )
-    parser.add_argument(
-        "--no-eval-fallback-to-transformers",
-        action="store_true",
-        help="Disable eval fallback to transformers.",
     )
     parser.add_argument(
         "--run-name-prefix",
@@ -315,11 +304,6 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
     if args.no_mask_truncated_completions:
         data["mask_truncated_completions"] = False
 
-    if args.eval_fallback_to_transformers:
-        data["eval_fallback_to_transformers"] = True
-    if args.no_eval_fallback_to_transformers:
-        data["eval_fallback_to_transformers"] = False
-
     models = data["models"]
     if isinstance(models, str):
         models = [models]
@@ -413,12 +397,8 @@ def _eval_model(
     eval_config: str | None,
     max_new_tokens: int,
     repetition_penalty: float,
-    backend: str,
-    fallback_to_transformers: bool,
 ) -> Path:
     eval_script = "eval_grpo.py"
-    if backend in {"mlx", "auto"}:
-        eval_script = "eval_grpo_mlx.py"
 
     command = [python_bin, eval_script]
     if eval_config is not None:
@@ -441,8 +421,6 @@ def _eval_model(
             str(output_dir),
         ]
     )
-    if eval_script == "eval_grpo_mlx.py" and not fallback_to_transformers:
-        command.append("--no-fallback-to-transformers")
     command.extend(["--repetition-penalty", str(repetition_penalty)])
     if max_samples is not None:
         command.extend(["--max-samples", str(max_samples)])
@@ -648,8 +626,6 @@ def run_pipeline(config: PrelimConfig) -> None:
             eval_config=config.eval_config,
             max_new_tokens=config.eval_max_new_tokens,
             repetition_penalty=config.repetition_penalty,
-            backend=config.eval_backend,
-            fallback_to_transformers=config.eval_fallback_to_transformers,
         )
         baseline_metrics = _read_json(baseline_metrics_path)
 
@@ -668,8 +644,6 @@ def run_pipeline(config: PrelimConfig) -> None:
                 eval_config=config.eval_config,
                 max_new_tokens=config.eval_max_new_tokens,
                 repetition_penalty=config.repetition_penalty,
-                backend=config.eval_backend,
-                fallback_to_transformers=config.eval_fallback_to_transformers,
             )
             tuned_metrics = _read_json(tuned_metrics_path)
             _run_compare(
@@ -742,8 +716,6 @@ def run_pipeline(config: PrelimConfig) -> None:
                 eval_config=config.eval_config,
                 max_new_tokens=config.eval_max_new_tokens,
                 repetition_penalty=config.repetition_penalty,
-                backend=config.eval_backend,
-                fallback_to_transformers=config.eval_fallback_to_transformers,
             )
             tuned_metrics = _read_json(tuned_metrics_path)
 

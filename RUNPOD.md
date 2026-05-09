@@ -87,7 +87,7 @@ This step does NOT use `--ignore-installed` (avoids needlessly reinstalling torc
 
 ### Version constraints
 
-`pyproject.toml` uses `torch==2.4.0` and `torchvision>=0.19.0`, pinned to match the template's `torch 2.4.0` so pip never attempts an upgrade.
+`pyproject.toml` uses `torch>=2.0.0`, with no upper pin so the RunPod template's torch is never upgraded.
 
 ## Config Files
 
