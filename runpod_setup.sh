@@ -10,6 +10,7 @@ export TORCH_HOME="${TORCH_HOME:-$PERSISTENT_DIR/torch_cache}"
 mkdir -p "$HF_HOME" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$TORCH_HOME" "$PERSISTENT_DIR/outputs"
 
 TORCH_CUDA="${TORCH_CUDA:-cu124}"
+TORCH_VERSION_SPEC="${TORCH_VERSION_SPEC:->=2.0.0}"
 
 PIP_OPTS="--root-user-action=ignore"
 
@@ -19,39 +20,46 @@ pip install --ignore-installed blinker>=1.9.0 $PIP_OPTS 2>/dev/null || true
 
 TORCH_EXTRA_INDEX="https://download.pytorch.org/whl/${TORCH_CUDA}"
 
+install_non_torch_deps() {
+    pip install --upgrade pip $PIP_OPTS
+    pip install -e ".[dev]" --no-deps $PIP_OPTS
+    pip install accelerate datasets peft transformers trl pyyaml math-verify tqdm streamlit $PIP_OPTS
+}
+
 if python -c "import torch; torch.cuda.is_available(); print('torch', torch.__version__, 'CUDA OK')" 2>/dev/null; then
-    echo "PyTorch already installed with CUDA, skipping torch in requirements"
-    grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
-    pip install --upgrade pip $PIP_OPTS
-    pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
+    echo "PyTorch already installed with CUDA, skipping torch reinstall"
+    install_non_torch_deps
 elif python -c "import torch; print('torch', torch.__version__, 'installed but CUDA unavailable')" 2>/dev/null; then
-    echo "PyTorch installed but CUDA unavailable (driver mismatch). Replacing with cu124 torch..."
+    echo "PyTorch installed but CUDA unavailable (driver mismatch). Replacing with ${TORCH_CUDA} torch..."
     pip install --upgrade pip $PIP_OPTS
-    grep -v '^torch' requirements.txt > /tmp/requirements_notorch.txt || true
-    pip install -r /tmp/requirements_notorch.txt $PIP_OPTS
+    pip install -e ".[dev]" --no-deps $PIP_OPTS
     pip uninstall -y torch torchaudio 2>/dev/null || true
-    pip install "torch>=2.0.0,<2.8.0" \
+    pip install "torch${TORCH_VERSION_SPEC}" \
       --index-url "$TORCH_EXTRA_INDEX" \
-      --extra-index-url "https://pypi.org/simple"
+      --extra-index-url "https://pypi.org/simple" \
+      $PIP_OPTS
 else
     echo "PyTorch not found. Installing with CUDA support..."
     pip install --upgrade pip $PIP_OPTS
-    pip install -r requirements.txt $PIP_OPTS --extra-index-url "$TORCH_EXTRA_INDEX"
+    pip install -e ".[dev]" --no-deps $PIP_OPTS
+    pip install "torch${TORCH_VERSION_SPEC}" \
+      --index-url "$TORCH_EXTRA_INDEX" \
+      --extra-index-url "https://pypi.org/simple" \
+      $PIP_OPTS
 fi
-# Install the package itself — deps already handled by pip install -r above.
-# --no-deps prevents pip from re-resolving torch against PyPI and upgrading
-# from our cu124 build to an incompatible cu130 build.
-pip install -e . --no-deps
-
-# NCCL tuning for multi-GPU cloud instances
-export NCCL_DEBUG="${NCCL_DEBUG:-WARN}"
-export NCCL_IB_DISABLE="${NCCL_IB_DISABLE:-1}"
-export NCCL_SOCKET_IFNAME="${NCCL_SOCKET_IFNAME:-^docker0,lo}"
-export NCCL_P2P_DISABLE="${NCCL_P2P_DISABLE:-0}"
-export NCCL_TIMEOUT="${NCCL_TIMEOUT:-1800}"
 
 export TOKENIZERS_PARALLELISM=false
 export PYTHONUNBUFFERED=1
 
-GPU_COUNT=$(nvidia-smi -L 2>/dev/null | wc -l || echo "1")
-echo "Detected $GPU_COUNT GPU(s)"
+echo ""
+echo "=== Environment sanity check ==="
+python -c "
+import torch, transformers, trl
+print(f'torch {torch.__version__}, CUDA {torch.version.cuda}')
+print(f'transformers {transformers.__version__}, trl {trl.__version__}')
+if torch.cuda.is_available():
+    for i in range(torch.cuda.device_count()):
+        print(f'  GPU {i}: {torch.cuda.get_device_name(i)}')
+else:
+    print('  GPU: none (CUDA not available)')
+"

@@ -14,7 +14,7 @@ A **single** RTX 4090 spot is the sweet spot. Multi-GPU not worth it at this mod
 
 ## Base Template
 
-Use `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`. Do NOT build a custom Docker image — the base template already has PyTorch with CUDA 12.4, triton, NCCL, and all the CUDA kernels. Building your own Docker is unnecessary and risks version mismatches.
+Use `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`. Do NOT build a custom Docker image — the base template already has PyTorch with CUDA 12.4, triton, and all the CUDA kernels. Building your own Docker is unnecessary and risks version mismatches.
 
 Settings on the RunPod pod:
 - **Template**: `runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04`
@@ -71,23 +71,14 @@ Then run training or sweep without re-installing:
 ```bash
 if python -c "import torch; assert torch.cuda.is_available()" 2>/dev/null
 ```
-If torch + CUDA works, skip torch in `requirements.txt` via `grep -v '^torch'`. If not, install from scratch with `--extra-index-url` pointing to the CUDA wheelhouse.
+If torch + CUDA works, skip torch reinstall and install other deps from `pyproject.toml`. If not, install from scratch with `--index-url` pointing to the CUDA wheelhouse.
 
 **Step 2 — Install deps:**
 ```bash
-pip install -r /tmp/requirements_notorch.txt --ignore-installed --root-user-action=ignore
+pip install -e ".[dev]" --no-deps
+pip install accelerate datasets peft transformers trl ...
 ```
-The `--ignore-installed` flag resolves the blinker issue by installing the new version alongside the system one rather than trying to uninstall it.
-
-**Step 3 — Install the package:**
-```bash
-pip install -e . --extra-index-url https://download.pytorch.org/whl/cu124
-```
-This step does NOT use `--ignore-installed` (avoids needlessly reinstalling torch), but DOES include the extra index URL as a safety net if pip decides it needs torch after all.
-
-### Version constraints
-
-`pyproject.toml` uses `torch>=2.0.0`, with no upper pin so the RunPod template's torch is never upgraded.
+Dependencies are installed directly from `pyproject.toml` — no `requirements.txt` needed. The `--no-deps` flag on the editable install prevents pip from re-resolving torch against PyPI.
 
 ## Config Files
 
@@ -101,7 +92,7 @@ Training config optimized for RunPod:
 - `output_dir: /workspace/outputs/...` — network volume for spot survival
 
 ### `configs/accelerate_runpod.yaml`
-Multi-GPU accelerate config (bf16 mixed precision, `num_processes: 1` by default — overridden at runtime by GPU count detection).
+Single-GPU accelerate config (bf16 mixed precision, `distributed_type: NO`).
 
 ## Sweep Pipeline
 
@@ -181,7 +172,7 @@ Inside tmux:
 | `runpod_start.sh` | Single-training entrypoint for RunPod (runs `train_grpo.py`) |
 | `runpod_sweep.sh` | Sweep entrypoint for RunPod (runs `run_prelim.py`) |
 | `configs/grpo_runpod.yaml` | Training config for RunPod (bf16, save_steps=50) |
-| `configs/accelerate_runpod.yaml` | Multi-GPU accelerate config |
+| `configs/accelerate_runpod.yaml` | Single-GPU accelerate config |
 | `configs/pipeline_sweep.yaml` | Full sweep pipeline config (400 steps, 2 models, 2 loss types) |
 | `configs/pipeline_sweep_smoke.yaml` | Smoke sweep pipeline config (10 steps, quick validation) |
 | `train_grpo.py` | Training script with SIGTERM handler, auto-resume, SpotInterruptCallback |
