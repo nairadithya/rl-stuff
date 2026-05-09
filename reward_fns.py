@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from trl.rewards import accuracy_reward
-
 
 def _extract_text(completion: Any) -> str:
     if isinstance(completion, str):
@@ -37,6 +35,21 @@ def _extract_boxed(text: str) -> str | None:
                 return text[start:i]
         i += 1
     return None
+
+
+def accuracy_reward(completions, solution, **kwargs):
+    rewards = []
+    for completion, gold in zip(completions, solution):
+        gold_str = str(gold).strip().lower()
+        reward = 0.0
+        if isinstance(completion, str):
+            completion_lower = completion.strip().lower()
+            if completion_lower == gold_str:
+                reward = 1.0
+            elif completion_lower.endswith(gold_str) or gold_str in completion_lower:
+                reward = 1.0
+        rewards.append(reward)
+    return rewards
 
 
 def robust_accuracy_reward(completions, solution, **kwargs):
