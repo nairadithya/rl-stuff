@@ -370,7 +370,9 @@ def _sanitize_name(name: str) -> str:
 def _run(command: list[str], *, cwd: Path) -> None:
     printable = " ".join(command)
     print(f"$ {printable}", flush=True)
-    subprocess.run(command, cwd=cwd, check=True)
+    env = os.environ.copy()
+    env["TRITON_INTERPRET"] = "1"
+    subprocess.run(command, cwd=cwd, check=True, env=env)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
