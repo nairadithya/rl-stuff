@@ -42,12 +42,12 @@ def accuracy_reward(completions, solution, **kwargs):
     for completion, gold in zip(completions, solution):
         gold_str = str(gold).strip().lower()
         reward = 0.0
-        if isinstance(completion, str):
-            completion_lower = completion.strip().lower()
-            if completion_lower == gold_str:
-                reward = 1.0
-            elif completion_lower.endswith(gold_str) or gold_str in completion_lower:
-                reward = 1.0
+        completion_text = _extract_text(completion)
+        completion_lower = completion_text.strip().lower()
+        if completion_lower == gold_str:
+            reward = 1.0
+        elif completion_lower.endswith(gold_str) or gold_str in completion_lower:
+            reward = 1.0
         rewards.append(reward)
     return rewards
 
@@ -56,7 +56,7 @@ def robust_accuracy_reward(completions, solution, **kwargs):
     scores = accuracy_reward(completions=completions, solution=solution, **kwargs)
     rewards = []
     for completion, gold, score in zip(completions, solution, scores):
-        if score is not None:
+        if score > 0.0:
             rewards.append(float(score))
             continue
 

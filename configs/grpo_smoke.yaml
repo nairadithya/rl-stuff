@@ -27,7 +27,7 @@ reward_type: length
 
 use_vllm: false
 gradient_checkpointing: true
-bf16: false
+bf16: true
 fp16: false
 report_to: none
 log_completions: false
