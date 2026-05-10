@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import json
 import os
 import signal
 import sys
@@ -208,6 +209,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help='Python list/tuple of module names, e.g. \'["q_proj","v_proj"]\'.',
     )
+    parser.add_argument(
+        "--notes",
+        default=None,
+        help="Free-text notes describing this training run.",
+    )
+    parser.add_argument(
+        "--tags",
+        default=None,
+        nargs="+",
+        help='Key-value tags, e.g. --tags dataset=foo lr=1e-6.',
+    )
     return parser.parse_args()
 
 
@@ -269,6 +281,7 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
         "lora_dropout": args.lora_dropout,
         "resume_from_checkpoint": args.resume_from_checkpoint,
         "hf_token": args.hf_token,
+        "notes": args.notes,
     }
 
     for key, value in overrides.items():
@@ -318,6 +331,19 @@ def merge_config(defaults: TrainingConfig, args: argparse.Namespace) -> Training
 
     if isinstance(data.get("lora_target_modules"), list):
         data["lora_target_modules"] = tuple(data["lora_target_modules"])
+
+    if args.tags is not None:
+        tags_dict: dict[str, str] = {}
+        for tag in args.tags:
+            if "=" not in tag:
+                raise ValueError(
+                    f"Invalid tag format: '{tag}'. Expected key=value."
+                )
+            key, _, value = tag.partition("=")
+            if not key:
+                raise ValueError(f"Tag key cannot be empty: '{tag}'.")
+            tags_dict[key] = value
+        data["tags"] = tags_dict
 
     if data.get("warmup_steps") is not None and data["warmup_steps"] < 0:
         raise ValueError("warmup_steps must be >= 0")
@@ -486,6 +512,25 @@ def main() -> None:
 
     trainer.train(resume_from_checkpoint=resume)
     trainer.save_model(config.output_dir)
+
+    metadata = {
+        "notes": config.notes,
+        "tags": config.tags,
+        "run_name": config.run_name,
+        "model_name": config.model_name,
+        "dataset_name": config.dataset_name,
+        "loss_type": config.loss_type,
+        "reward_type": config.reward_type,
+        "max_steps": config.max_steps,
+        "learning_rate": config.learning_rate,
+        "num_generations": config.num_generations,
+        "seed": config.seed,
+    }
+    metadata_path = Path(config.output_dir) / "run_metadata.json"
+    with metadata_path.open("w", encoding="utf-8") as handle:
+        json.dump(metadata, handle, indent=2, sort_keys=True)
+        handle.write("\n")
+    print(f"Wrote run metadata: {metadata_path}", flush=True)
 
 
 if __name__ == "__main__":

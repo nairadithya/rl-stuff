@@ -54,3 +54,5 @@ class TrainingConfig:
             "gate_proj",
         )
     )
+    notes: str | None = None
+    tags: dict[str, str] | None = None

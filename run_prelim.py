@@ -51,6 +51,8 @@ class PrelimConfig:
     eval_backend: str = "transformers"
     parallel: bool = False
     max_concurrent: int | None = None
+    notes: str | None = None
+    tags: dict[str, str] | None = None
 
 
 def parse_args() -> argparse.Namespace:
@@ -238,6 +240,17 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="Max models to train simultaneously (default: all if --parallel).",
     )
+    parser.add_argument(
+        "--notes",
+        default=None,
+        help="Free-text notes describing this experiment.",
+    )
+    parser.add_argument(
+        "--tags",
+        default=None,
+        nargs="+",
+        help='Key-value tags, e.g. --tags dataset=foo lr=1e-6.',
+    )
     return parser.parse_args()
 
 
@@ -294,6 +307,7 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
         "accelerate_config": args.accelerate_config,
         "eval_backend": args.eval_backend,
         "max_concurrent": args.max_concurrent,
+        "notes": args.notes,
     }
 
     for key, value in overrides.items():
@@ -326,6 +340,19 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
         data["parallel"] = True
     if args.no_parallel:
         data["parallel"] = False
+
+    if args.tags is not None:
+        tags_dict: dict[str, str] = {}
+        for tag in args.tags:
+            if "=" not in tag:
+                raise ValueError(
+                    f"Invalid tag format: '{tag}'. Expected key=value."
+                )
+            key, _, value = tag.partition("=")
+            if not key:
+                raise ValueError(f"Tag key cannot be empty: '{tag}'.")
+            tags_dict[key] = value
+        data["tags"] = tags_dict
 
     models = data["models"]
     if isinstance(models, str):
@@ -477,6 +504,8 @@ def _train_model(
     train_config: str | None,
     use_accelerate: bool,
     accelerate_config: str | None,
+    notes: str | None = None,
+    tags: dict[str, str] | None = None,
     loss_type: str | None = None,
     beta: float | None = None,
     num_train_epochs: float | None = None,
@@ -541,6 +570,12 @@ def _train_model(
     else:
         command.append("--no-mask-truncated-completions")
 
+    if notes is not None:
+        command.extend(["--notes", notes])
+    if tags is not None:
+        for key, value in tags.items():
+            command.extend(["--tags", f"{key}={value}"])
+
     _run(command, cwd=repo_root)
 
 
@@ -590,7 +625,7 @@ def _add_leaderboard_row(rows, model, model_slug, loss_type,
 
 def _record_run(manifest_path, model, model_slug, loss_type,
                 baseline_metrics_path, tuned_metrics_path,
-                tuned_model_path, model_dir):
+                tuned_model_path, model_dir, notes=None, tags=None):
     lt_slug = loss_type or "default"
     run_record = {
         "model": model,
@@ -602,15 +637,52 @@ def _record_run(manifest_path, model, model_slug, loss_type,
         "tuned_model_path": tuned_model_path,
         "comparison_dir": str(model_dir / "comparison" / lt_slug),
     }
+    if notes is not None:
+        run_record["notes"] = notes
+    if tags is not None:
+        run_record["tags"] = tags
     manifest = _read_json(manifest_path)
     manifest["runs"].append(run_record)
     _write_json(manifest_path, manifest)
+
+
+def _prompt_annotations(config: PrelimConfig) -> tuple[str | None, dict[str, str] | None]:
+    notes = config.notes
+    tags = config.tags
+
+    if notes is None:
+        print("\n--- Experiment Annotations ---")
+        try:
+            raw = input("Notes (free-text description of this run, or blank to skip): ").strip()
+            notes = raw if raw else None
+        except (EOFError, KeyboardInterrupt):
+            notes = None
+
+    if tags is None:
+        try:
+            raw = input("Tags (key=value pairs separated by spaces, or blank to skip): ").strip()
+            if raw:
+                parsed: dict[str, str] = {}
+                for tag in raw.split():
+                    if "=" not in tag:
+                        print(f"  Skipping invalid tag: '{tag}' (expected key=value)")
+                        continue
+                    key, _, value = tag.partition("=")
+                    if key:
+                        parsed[key] = value
+                tags = parsed if parsed else None
+        except (EOFError, KeyboardInterrupt):
+            tags = None
+
+    return notes, tags
 
 
 def run_pipeline(config: PrelimConfig) -> None:
     repo_root = Path(__file__).resolve().parent
     output_root = Path(config.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
+
+    notes, tags = _prompt_annotations(config)
 
     experiment_id = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
     experiment_dir = output_root / experiment_id
@@ -620,10 +692,20 @@ def run_pipeline(config: PrelimConfig) -> None:
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "experiment_id": experiment_id,
         "config": asdict(config),
+        "notes": notes,
+        "tags": tags,
         "runs": [],
     }
     manifest_path = experiment_dir / "manifest.json"
     _write_json(manifest_path, manifest)
+
+    metadata = {
+        "notes": notes,
+        "tags": tags,
+        "experiment_id": experiment_id,
+    }
+    metadata_path = experiment_dir / "run_metadata.json"
+    _write_json(metadata_path, metadata)
 
     leaderboard_rows: list[dict[str, Any]] = []
 
@@ -722,7 +804,7 @@ def run_pipeline(config: PrelimConfig) -> None:
             )
             _record_run(manifest_path, model, model_slug, None,
                         baseline_metrics_path, tuned_metrics_path,
-                        tuned_model_path, model_dir)
+                        tuned_model_path, model_dir, notes=notes, tags=tags)
             continue
 
         for lt in loss_types:
@@ -763,6 +845,8 @@ def run_pipeline(config: PrelimConfig) -> None:
                 train_config=config.train_config,
                 use_accelerate=config.use_accelerate,
                 accelerate_config=config.accelerate_config,
+                notes=notes,
+                tags=tags,
                 loss_type=lt,
                 beta=config.beta,
                 num_train_epochs=config.num_train_epochs,
@@ -798,7 +882,7 @@ def run_pipeline(config: PrelimConfig) -> None:
             )
             _record_run(manifest_path, model, model_slug, lt,
                         baseline_metrics_path, tuned_metrics_path,
-                        tuned_model_path, model_dir)
+                        tuned_model_path, model_dir, notes=notes, tags=tags)
 
     fieldnames = ["model", "baseline_accuracy", "tuned_accuracy", "accuracy_delta"]
     if len(loss_types) > 1 or (len(loss_types) == 1 and loss_types[0] is not None):
