@@ -10,8 +10,8 @@ test_max_samples: 500
 max_steps: 400
 learning_rate: 1.0e-6
 reward_type: accuracy_format
-max_completion_length: 384
-eval_max_new_tokens: 640
+max_completion_length: 1024
+eval_max_new_tokens: 1024
 temperature: 0.7
 top_p: 0.95
 repetition_penalty: 1.05
@@ -32,4 +32,4 @@ eval_backend: transformers
 run_name_prefix: sweep
 seed: 42
 use_accelerate: true
-parallel: true
+parallel: false

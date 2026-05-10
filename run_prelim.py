@@ -53,6 +53,7 @@ class PrelimConfig:
     max_concurrent: int | None = None
     notes: str | None = None
     tags: dict[str, str] | None = None
+    yes: bool = False
 
 
 def parse_args() -> argparse.Namespace:
@@ -251,6 +252,11 @@ def parse_args() -> argparse.Namespace:
         nargs="+",
         help='Key-value tags, e.g. --tags dataset=foo lr=1e-6.',
     )
+    parser.add_argument(
+        "-y", "--yes",
+        action="store_true",
+        help="Skip interactive prompts.",
+    )
     return parser.parse_args()
 
 
@@ -354,53 +360,8 @@ def merge_config(defaults: PrelimConfig, args: argparse.Namespace) -> PrelimConf
             tags_dict[key] = value
         data["tags"] = tags_dict
 
-    models = data["models"]
-    if isinstance(models, str):
-        models = [models]
-    if not models:
-        raise ValueError("At least one model must be specified.")
-    data["models"] = models
-
-    tuned_model_paths = data.get("tuned_model_paths")
-    if tuned_model_paths is not None:
-        if len(tuned_model_paths) != len(models):
-            raise ValueError(
-                "--tuned-model-paths must have the same number of entries as --models"
-            )
-
-    if data["skip_training"] and tuned_model_paths is None:
-        raise ValueError(
-            "When --skip-training is set, provide --tuned-model-paths in model order."
-        )
-
-    if (not data["skip_training"]) and tuned_model_paths is not None:
-        raise ValueError(
-            "--tuned-model-paths can only be used with --skip-training."
-        )
-
-    if data["max_steps"] <= 0:
-        raise ValueError("max_steps must be > 0")
-    if data["learning_rate"] <= 0:
-        raise ValueError("learning_rate must be > 0")
-    if data["max_completion_length"] <= 0:
-        raise ValueError("max_completion_length must be > 0")
-    if data["eval_max_new_tokens"] <= 0:
-        raise ValueError("eval_max_new_tokens must be > 0")
-    if data["temperature"] < 0:
-        raise ValueError("temperature must be >= 0")
-    if not (0 < data["top_p"] <= 1.0):
-        raise ValueError("top_p must be in (0, 1]")
-    if data["repetition_penalty"] <= 0:
-        raise ValueError("repetition_penalty must be > 0")
-    if data["num_generations"] <= 0:
-        raise ValueError("num_generations must be > 0")
-    if data["per_device_train_batch_size"] <= 0:
-        raise ValueError("per_device_train_batch_size must be > 0")
-    if data["gradient_accumulation_steps"] <= 0:
-        raise ValueError("gradient_accumulation_steps must be > 0")
-
-    if data.get("python_bin") in (None, ""):
-        data["python_bin"] = sys.executable
+    if hasattr(args, "yes") and args.yes:
+        data["yes"] = True
 
     return PrelimConfig(**data)
 
@@ -649,6 +610,9 @@ def _record_run(manifest_path, model, model_slug, loss_type,
 def _prompt_annotations(config: PrelimConfig) -> tuple[str | None, dict[str, str] | None]:
     notes = config.notes
     tags = config.tags
+
+    if config.yes:
+        return notes, tags
 
     if notes is None:
         print("\n--- Experiment Annotations ---")

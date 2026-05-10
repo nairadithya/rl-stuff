@@ -83,8 +83,8 @@ sweep_config = {
     "max_steps": 400,
     "learning_rate": 1.0e-6,
     "reward_type": "accuracy_format",
-    "max_completion_length": 384,
-    "eval_max_new_tokens": 640,
+    "max_completion_length": 1024,
+    "eval_max_new_tokens": 1024,
     "temperature": 0.7,
     "top_p": 0.95,
     "repetition_penalty": 1.05,
@@ -108,7 +108,8 @@ sweep_config = {
     "use_accelerate": True,
     
     # Set to True if Kaggle environment has enough resources to run multiple models at once
-    "parallel": False, 
+    "parallel": False,
+    "yes": True,
 }
 
 config_path = "/kaggle/working/kaggle_sweep_config.yaml"
@@ -123,4 +124,4 @@ print(f"Sweep config written to {config_path}")
 # GRPO training over the different loss types, and tuned evaluations.
 
 # %%
-!python run_prelim.py --config /kaggle/working/kaggle_sweep_config.yaml
+!python run_prelim.py --config /kaggle/working/kaggle_sweep_config.yaml --yes
