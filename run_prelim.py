@@ -932,6 +932,9 @@ def main() -> None:
     args = parse_args()
     config = merge_config(PrelimConfig(), args)
 
+    if config.python_bin is None:
+        config.python_bin = sys.executable
+
     if "PYTHONPATH" not in os.environ:
         os.environ["PYTHONPATH"] = str(Path(__file__).resolve().parent)
 
