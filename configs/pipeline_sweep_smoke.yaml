@@ -32,3 +32,4 @@ eval_backend: transformers
 run_name_prefix: smoke
 seed: 42
 use_accelerate: true
+parallel: true
