@@ -8,9 +8,9 @@ fi
 
 echo "Shutting down RunPod pod $RUNPOD_POD_ID ..."
 RESPONSE=$(curl -s -w "\n%{http_code}" -X POST \
-  "https://api.runpod.ai/v2/pods/${RUNPOD_POD_ID}/stop" \
-  -H "Authorization: Bearer ${RUNPOD_API_KEY}" \
-  -H "Content-Type: application/json")
+  "https://api.runpod.io/graphql?api_key=${RUNPOD_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"query\": \"mutation { podStop(input: {podId: \\\"${RUNPOD_POD_ID}\\\"}) { id desiredStatus } }\"}")
 
 HTTP_CODE=$(echo "$RESPONSE" | tail -1)
 BODY=$(echo "$RESPONSE" | head -1)

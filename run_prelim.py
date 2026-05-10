@@ -677,7 +677,7 @@ def _prompt_annotations(config: PrelimConfig) -> tuple[str | None, dict[str, str
     return notes, tags
 
 
-def run_pipeline(config: PrelimConfig) -> None:
+def run_pipeline(config: PrelimConfig, config_path: str | None = None) -> None:
     repo_root = Path(__file__).resolve().parent
     output_root = Path(config.output_root)
     output_root.mkdir(parents=True, exist_ok=True)
@@ -723,11 +723,16 @@ def run_pipeline(config: PrelimConfig) -> None:
             while model_queue and len(active) < max_workers:
                 model = model_queue.pop(0)
                 child_cmd = [sys.executable, __file__]
-                if args.config is not None:
-                    child_cmd += ["--config", args.config]
+                if config_path is not None:
+                    child_cmd += ["--config", config_path]
                 child_cmd += ["--models", model, "--no-parallel"]
                 if config.skip_training:
                     child_cmd.append("--skip-training")
+                if notes is not None:
+                    child_cmd += ["--notes", notes]
+                if tags is not None:
+                    for k, v in tags.items():
+                        child_cmd += ["--tags", f"{k}={v}"]
                 print(f"  Starting: {model}")
                 proc = subprocess.Popen(child_cmd)
                 active.append((model, proc))
@@ -966,7 +971,7 @@ def main() -> None:
     if "PYTHONPATH" not in os.environ:
         os.environ["PYTHONPATH"] = str(Path(__file__).resolve().parent)
 
-    run_pipeline(config)
+    run_pipeline(config, config_path=args.config)
 
 
 if __name__ == "__main__":
