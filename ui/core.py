@@ -156,7 +156,6 @@ def discover_model_options(repo_root: Path) -> list[str]:
                 options.add(str(path))
 
     return sorted(options)
-from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
