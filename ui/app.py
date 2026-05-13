@@ -5,8 +5,8 @@ from typing import Any
 
 import streamlit as st
 
-from ui.inference import GenerationConfig, generate_text, load_model_bundle
-from ui.results_loader import (
+from ui.core import GenerationConfig, generate_text, load_model_bundle
+from ui.core import (
     RunArtifacts,
     discover_model_options,
     list_experiments,
@@ -18,7 +18,7 @@ from ui.results_loader import (
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
-OUTPUT_ROOT = REPO_ROOT / "outputs" / "prelim"
+BASE_OUTPUTS_DIR = REPO_ROOT / "outputs"
 
 
 def _fmt(value: Any, digits: int = 4) -> str:
@@ -184,18 +184,39 @@ def main() -> None:
     st.title("GRPO Model Testing UI")
     st.caption("Inspect eval artifacts and prompt candidate models from one page.")
 
-    experiments = list_experiments(OUTPUT_ROOT)
-    experiment_map = {exp.name: exp for exp in experiments}
-
     with st.sidebar:
         st.markdown("### Results Source")
-        st.text(f"{OUTPUT_ROOT}")
-        if not experiments:
-            st.warning("No experiments found under outputs/prelim.")
+        
+        # 1. Discover sweep categories inside outputs/
+        if BASE_OUTPUTS_DIR.exists():
+            sweep_categories = [
+                d.name for d in BASE_OUTPUTS_DIR.iterdir() 
+                if d.is_dir() and not d.name.startswith(".")
+            ]
+        else:
+            sweep_categories = []
+
+        if not sweep_categories:
+            st.warning(f"No output directories found in {BASE_OUTPUTS_DIR}")
             selected_experiment = None
         else:
-            selected_name = st.selectbox("Experiment", list(experiment_map.keys()))
-            selected_experiment = experiment_map[selected_name]
+            # Sort categories, pushing 'prelim' to bottom if it exists for neatness
+            sweep_categories.sort()
+            
+            selected_category = st.selectbox("Sweep Category", sweep_categories)
+            current_output_root = BASE_OUTPUTS_DIR / selected_category
+            st.text(f"Path: {current_output_root.relative_to(REPO_ROOT)}")
+
+            # 2. Discover experiments inside the selected category
+            experiments = list_experiments(current_output_root)
+            experiment_map = {exp.name: exp for exp in experiments}
+
+            if not experiments:
+                st.warning(f"No experiments found under {current_output_root.relative_to(REPO_ROOT)}.")
+                selected_experiment = None
+            else:
+                selected_name = st.selectbox("Experiment", list(experiment_map.keys()))
+                selected_experiment = experiment_map[selected_name]
 
     top_left, top_right = st.columns([3, 2])
 
