@@ -181,7 +181,7 @@ def _prompt_panel() -> None:
 
 def main() -> None:
     st.set_page_config(page_title="Model Testing UI", layout="wide")
-    st.title("GRPO Model Testing UI")
+    st.title("Model Testing UI")
     st.caption("Inspect eval artifacts and prompt candidate models from one page.")
 
     with st.sidebar:
